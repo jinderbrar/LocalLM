@@ -2,6 +2,7 @@ import type { SearchQuery, SearchResult, Chunk, Citation } from '../types'
 import { getAllChunks, getDoc } from '../storage/db'
 import { loadLexicalIndex, saveLexicalIndex } from '../storage/indexCache'
 import { buildLexicalIndex, search as bm25Search } from '../index_lex'
+import { buildVectorIndex, semanticSearch } from '../index_vec'
 import { queryLatencyTracker } from '../perf/latency'
 
 export async function executeSearch(query: SearchQuery): Promise<SearchResult> {
@@ -25,11 +26,13 @@ export async function executeSearch(query: SearchQuery): Promise<SearchResult> {
     case 'lexical':
       results = bm25Search(query.text, index, chunksMap, query.topK || 10)
       break
-    case 'semantic':
-      // TODO: Implement in Milestone D
-      throw new Error('Semantic search not yet implemented')
+    case 'semantic': {
+      const vectorIndex = await buildVectorIndex(chunks)
+      results = await semanticSearch(query.text, vectorIndex, chunksMap, query.topK || 10)
+      break
+    }
     case 'hybrid':
-      // TODO: Implement in Milestone D
+      // TODO: Implement hybrid in next commit
       throw new Error('Hybrid search not yet implemented')
   }
 

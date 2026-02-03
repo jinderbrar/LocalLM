@@ -103,8 +103,8 @@ function Chat() {
               onChange={(e) => setSearchMode(e.target.value as SearchMode)}
             >
               <option value="lexical">Lexical (BM25)</option>
-              <option value="semantic" disabled>
-                Semantic (coming soon)
+              <option value="semantic">
+                Semantic (Embeddings)
               </option>
               <option value="hybrid" disabled>
                 Hybrid (coming soon)
