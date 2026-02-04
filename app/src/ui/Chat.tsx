@@ -16,6 +16,7 @@ interface ChatMessage {
 function Chat() {
   const [query, setQuery] = useState('')
   const [searchMode, setSearchMode] = useState<SearchMode>('lexical')
+  const [alpha, setAlpha] = useState(0.5) // For hybrid: semantic weight
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,6 +61,7 @@ function Chat() {
         text: userMessage.text,
         mode: searchMode,
         topK: 10,
+        alpha: searchMode === 'hybrid' ? alpha : undefined,
       })
 
       const assistantMessage: ChatMessage = {
@@ -106,8 +108,8 @@ function Chat() {
               <option value="semantic">
                 Semantic (Embeddings)
               </option>
-              <option value="hybrid" disabled>
-                Hybrid (coming soon)
+              <option value="hybrid">
+                Hybrid (Best of Both)
               </option>
             </select>
           </div>
@@ -119,6 +121,22 @@ function Chat() {
             📊
           </button>
         </div>
+        {searchMode === 'hybrid' && (
+          <div className="alpha-slider-container">
+            <label>
+              <span>Semantic weight: {Math.round(alpha * 100)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={alpha}
+                onChange={(e) => setAlpha(parseFloat(e.target.value))}
+                className="alpha-slider"
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       <div className="chat-content">
