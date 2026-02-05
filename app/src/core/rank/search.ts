@@ -5,9 +5,18 @@ import { buildLexicalIndex, search as bm25Search } from '../index_lex'
 import { buildVectorIndex, semanticSearch } from '../index_vec'
 import { queryLatencyTracker } from '../perf/latency'
 import { normalizeScores } from './normalize'
+import { generateAnswer, polishAnswer, formatContextFromChunks } from '../generate'
+import { debugLogger } from '../debug'
+import type { RetrievalDetails } from '../debug'
 
 export async function executeSearch(query: SearchQuery): Promise<SearchResult> {
   const startTime = performance.now()
+
+  // Start debug logging
+  const queryId = debugLogger.startQuery(query.text, query.mode, query.chatMode || 'search')
+
+  // Log retrieval start
+  debugLogger.logRetrievalStart(query.mode, query.topK || 10, query.alpha)
 
   // Load chunks
   const chunks = await getAllChunks()
@@ -91,8 +100,95 @@ export async function executeSearch(query: SearchQuery): Promise<SearchResult> {
 
   const retrievalTime = performance.now() - startTime
 
+  // Log retrieval completion
+  const retrievalDetails: RetrievalDetails = {
+    mode: query.mode,
+    topK: query.topK || 10,
+    alpha: query.alpha,
+    resultsCount: citations.length,
+    chunks: citations.map((c) => ({
+      id: c.chunkId,
+      text: c.text,
+      score: c.score || 0,
+      docName: c.docName,
+      pageNumber: c.pageNumber,
+    })),
+  }
+  debugLogger.logRetrievalComplete(retrievalDetails, retrievalTime)
+
+  // Generate answer if in chat mode
+  let generatedAnswer: string | undefined = undefined
+  let generationTime = 0
+  let polishTime = 0
+
+  console.log('Chat mode check:', {
+    chatMode: query.chatMode,
+    citationsCount: citations.length,
+    willGenerate: query.chatMode === 'chat' && citations.length > 0,
+  })
+
+  if (query.chatMode === 'chat' && citations.length > 0) {
+    console.log('🤖 Starting answer generation...')
+    debugLogger.logGenerationStart()
+    try {
+      const genStart = performance.now()
+      const context = formatContextFromChunks(
+        citations.slice(0, 5).map((c) => ({ text: c.text, docName: c.docName }))
+      )
+      console.log('Context for generation:', context.substring(0, 200) + '...')
+
+      // Log context built
+      debugLogger.logContextBuilt({
+        contextLength: context.length,
+        contextPreview: context.substring(0, 500),
+        chunksUsed: Math.min(5, citations.length),
+      })
+
+      generatedAnswer = await generateAnswer(query.text, context)
+      generationTime = performance.now() - genStart
+      console.log('✅ Generation complete:', { answer: generatedAnswer, time: generationTime })
+
+      // Log generation complete
+      debugLogger.logGenerationComplete({
+        answer: generatedAnswer,
+        answerLength: generatedAnswer.length,
+      }, generationTime)
+
+      // Polish answer if enabled
+      if (query.polish && generatedAnswer) {
+        console.log('✨ Starting answer polishing...')
+        debugLogger.logPolishStart(generatedAnswer)
+        try {
+          const polishStart = performance.now()
+          const originalAnswer = generatedAnswer
+          generatedAnswer = await polishAnswer(generatedAnswer, query.text)
+          polishTime = performance.now() - polishStart
+          console.log('✅ Polishing complete:', { polished: generatedAnswer, time: polishTime })
+
+          // Log polish complete
+          debugLogger.logPolishComplete(generatedAnswer, polishTime)
+        } catch (error) {
+          console.error('❌ Polishing failed:', error)
+          debugLogger.logError(error instanceof Error ? error : String(error), { context: 'polish' })
+          // Keep the original answer if polishing fails
+        }
+      }
+    } catch (error) {
+      console.error('❌ Generation failed:', error)
+      debugLogger.logError(error instanceof Error ? error : String(error), { context: 'generation' })
+      generatedAnswer = `Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    }
+  } else {
+    console.log('⏭️ Skipping generation (search mode or no results)')
+  }
+
+  const totalTime = performance.now() - startTime
+
   // Track latency
-  queryLatencyTracker.record(retrievalTime)
+  queryLatencyTracker.record(totalTime)
+
+  // Log query completion
+  debugLogger.logQueryComplete(totalTime)
 
   return {
     chunks: results.map((r) => r.chunk),
@@ -100,8 +196,11 @@ export async function executeSearch(query: SearchQuery): Promise<SearchResult> {
     scores: results.map((r) => r.score),
     latency: {
       retrieval: retrievalTime,
-      total: retrievalTime,
+      generation: generationTime > 0 ? generationTime : undefined,
+      polish: polishTime > 0 ? polishTime : undefined,
+      total: totalTime,
     },
+    generatedAnswer,
   }
 }
 

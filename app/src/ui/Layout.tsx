@@ -1,6 +1,6 @@
 import Sources from './Sources'
 import Chat from './Chat'
-import Studio from './Studio'
+import Debug from './Debug'
 import './Layout.css'
 
 function Layout() {
@@ -24,8 +24,8 @@ function Layout() {
         <div className="panel panel-chat">
           <Chat />
         </div>
-        <div className="panel panel-studio">
-          <Studio />
+        <div className="panel panel-debug">
+          <Debug />
         </div>
       </main>
     </div>

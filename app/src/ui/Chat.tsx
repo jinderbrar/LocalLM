@@ -2,7 +2,15 @@ import { useState, useEffect, useRef } from 'react'
 import { executeSearch } from '../core/rank'
 import { getAllDocs } from '../core/storage/db'
 import { getLatencyStats } from '../core/perf/latency'
-import type { SearchResult, SearchMode } from '../core/types'
+import {
+  initGenerationModel,
+  getCurrentModelId,
+  DEFAULT_MODEL_ID,
+  getModelById,
+} from '../core/generate'
+import type { SearchResult, SearchMode, ChatMode } from '../core/types'
+import ModelSelector from './ModelSelector'
+import ModelLoadingOverlay from './ModelLoadingOverlay'
 import './Chat.css'
 
 interface ChatMessage {
@@ -13,16 +21,86 @@ interface ChatMessage {
   timestamp: number
 }
 
+interface MessageState {
+  [messageId: string]: {
+    showAllSources: boolean
+  }
+}
+
 function Chat() {
   const [query, setQuery] = useState('')
-  const [searchMode, setSearchMode] = useState<SearchMode>('lexical')
+  const [searchMode, setSearchMode] = useState<SearchMode>('hybrid')
+  const [chatMode, setChatMode] = useState<ChatMode>('chat')
   const [alpha, setAlpha] = useState(0.5) // For hybrid: semantic weight
+  const [polish, setPolish] = useState(false) // For answer polishing
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [messageState, setMessageState] = useState<MessageState>({})
   const [searching, setSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasDocuments, setHasDocuments] = useState(false)
   const [showPerf, setShowPerf] = useState(false)
+  const [showModelSelector, setShowModelSelector] = useState(false)
+  const [currentModelId, setCurrentModelId] = useState<string>(
+    localStorage.getItem('selectedModelId') || DEFAULT_MODEL_ID
+  )
+  const [loadingModel, setLoadingModel] = useState<{
+    modelName: string
+    status: string
+    progress?: number
+  } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const toggleShowAllSources = (messageId: string) => {
+    setMessageState((prev) => ({
+      ...prev,
+      [messageId]: {
+        showAllSources: !prev[messageId]?.showAllSources,
+      },
+    }))
+  }
+
+  const handleModelChange = async (newModelId: string) => {
+    const modelConfig = getModelById(newModelId)
+    if (!modelConfig) return
+
+    setLoadingModel({
+      modelName: modelConfig.name,
+      status: 'loading',
+      progress: 0,
+    })
+
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.warn('Model loading timeout')
+      setLoadingModel(null)
+      setError(`Timeout loading ${modelConfig.name}. Check console for errors.`)
+    }, 120000) // 2 minute timeout
+
+    try {
+      await initGenerationModel(newModelId, (progress) => {
+        console.log('Progress update:', progress)
+        setLoadingModel({
+          modelName: modelConfig.name,
+          status: progress.status,
+          progress: progress.progress,
+        })
+      })
+
+      clearTimeout(timeoutId)
+      setCurrentModelId(newModelId)
+      localStorage.setItem('selectedModelId', newModelId)
+
+      // Hide loading after a brief delay
+      setTimeout(() => {
+        setLoadingModel(null)
+      }, 800)
+    } catch (error) {
+      clearTimeout(timeoutId)
+      console.error('Failed to load model:', error)
+      setError(`Failed to load ${modelConfig.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setLoadingModel(null)
+    }
+  }
 
   useEffect(() => {
     checkDocuments()
@@ -60,14 +138,21 @@ function Chat() {
       const searchResult = await executeSearch({
         text: userMessage.text,
         mode: searchMode,
-        topK: 10,
+        topK: 5,
         alpha: searchMode === 'hybrid' ? alpha : undefined,
+        chatMode,
+        polish: chatMode === 'chat' ? polish : undefined,
       })
+
+      const assistantText =
+        chatMode === 'chat' && searchResult.generatedAnswer
+          ? searchResult.generatedAnswer
+          : `Found ${searchResult.citations.length} results`
 
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         type: 'assistant',
-        text: `Found ${searchResult.citations.length} results`,
+        text: assistantText,
         result: searchResult,
         timestamp: Date.now(),
       }
@@ -99,20 +184,46 @@ function Chat() {
       <div className="chat-header">
         <h2>Chat</h2>
         <div className="header-controls">
+          <div className="chat-mode-toggle">
+            <button
+              className={`mode-btn ${chatMode === 'search' ? 'active' : ''}`}
+              onClick={() => setChatMode('search')}
+            >
+              🔍 Search
+            </button>
+            <button
+              className={`mode-btn ${chatMode === 'chat' ? 'active' : ''}`}
+              onClick={() => setChatMode('chat')}
+            >
+              💬 Chat
+            </button>
+          </div>
+          {chatMode === 'chat' && (
+            <button
+              className={`mode-btn ${polish ? 'active' : ''}`}
+              onClick={() => setPolish(!polish)}
+              title="Polish answers for better fluency"
+            >
+              ✨ Polish
+            </button>
+          )}
           <div className="search-mode">
             <select
               value={searchMode}
               onChange={(e) => setSearchMode(e.target.value as SearchMode)}
             >
               <option value="lexical">Lexical (BM25)</option>
-              <option value="semantic">
-                Semantic (Embeddings)
-              </option>
-              <option value="hybrid">
-                Hybrid (Best of Both)
-              </option>
+              <option value="semantic">Semantic (Embeddings)</option>
+              <option value="hybrid">Hybrid (Best of Both)</option>
             </select>
           </div>
+          <button
+            className="model-selector-btn"
+            onClick={() => setShowModelSelector(true)}
+            title="Change AI model"
+          >
+            🤖 {getModelById(currentModelId)?.name || 'Model'}
+          </button>
           <button
             className="perf-toggle"
             onClick={() => setShowPerf(!showPerf)}
@@ -164,10 +275,22 @@ function Chat() {
                   <div className="message-bubble assistant-bubble">
                     {message.result ? (
                       <div className="search-results">
+                        {message.result.generatedAnswer && (
+                          <div className="generated-answer">
+                            <p>{message.result.generatedAnswer}</p>
+                          </div>
+                        )}
                         <div className="results-header">
                           <span className="results-count">
-                            Found {message.result.citations.length} results in{' '}
+                            {message.result.generatedAnswer ? 'Sources: ' : 'Found '}
+                            {message.result.citations.length} results in{' '}
                             {message.result.latency.total.toFixed(0)}ms
+                            {message.result.latency.generation && (
+                              <> (gen: {message.result.latency.generation.toFixed(0)}ms)</>
+                            )}
+                            {message.result.latency.polish && (
+                              <> (polish: {message.result.latency.polish.toFixed(0)}ms)</>
+                            )}
                           </span>
                           {showPerf && (() => {
                             const stats = getLatencyStats()
@@ -181,21 +304,59 @@ function Chat() {
                             )
                           })()}
                         </div>
-                        {message.result.citations.map((citation, idx) => (
-                          <div key={citation.chunkId} className="result-card">
-                            <div className="result-header">
-                              <span className="result-rank">#{idx + 1}</span>
-                              <span className="result-doc">{citation.docName}</span>
-                              <span className="result-page">Page {citation.pageNumber}</span>
-                              {citation.score !== undefined && (
-                                <span className="result-score">
-                                  Score: {citation.score.toFixed(2)}
-                                </span>
+
+                        {(() => {
+                          const showAll = messageState[message.id]?.showAllSources
+                          const defaultLimit = message.result.generatedAnswer ? 3 : 5
+                          const visibleCitations = showAll
+                            ? message.result.citations
+                            : message.result.citations.slice(0, defaultLimit)
+                          const hasMore = message.result.citations.length > defaultLimit
+
+                          return (
+                            <>
+                              {message.result.generatedAnswer && !showAll ? (
+                                <div className="citation-badges">
+                                  {visibleCitations.map((citation, idx) => (
+                                    <div key={citation.chunkId} className="citation-badge" title={citation.text}>
+                                      <span className="badge-number">[{idx + 1}]</span>
+                                      <span className="badge-info">
+                                        {citation.docName} · p{citation.pageNumber}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                visibleCitations.map((citation, idx) => (
+                                  <div key={citation.chunkId} className="result-card">
+                                    <div className="result-header">
+                                      <span className="result-rank">#{idx + 1}</span>
+                                      <span className="result-doc">{citation.docName}</span>
+                                      <span className="result-page">Page {citation.pageNumber}</span>
+                                      {citation.score !== undefined && (
+                                        <span className="result-score">
+                                          Score: {citation.score.toFixed(2)}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="result-text">{citation.text}</p>
+                                  </div>
+                                ))
                               )}
-                            </div>
-                            <p className="result-text">{citation.text}</p>
-                          </div>
-                        ))}
+
+                              {hasMore && (
+                                <button
+                                  className="show-all-sources-btn"
+                                  onClick={() => toggleShowAllSources(message.id)}
+                                >
+                                  {showAll
+                                    ? '↑ Show less'
+                                    : `↓ Show all ${message.result.citations.length} sources`}
+                                </button>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
                     ) : (
                       <p>{message.text}</p>
@@ -240,6 +401,22 @@ function Chat() {
           {searching ? '⏳' : '➤'}
         </button>
       </div>
+
+      {showModelSelector && (
+        <ModelSelector
+          currentModelId={currentModelId}
+          onModelChange={handleModelChange}
+          onClose={() => setShowModelSelector(false)}
+        />
+      )}
+
+      {loadingModel && (
+        <ModelLoadingOverlay
+          modelName={loadingModel.modelName}
+          status={loadingModel.status}
+          progress={loadingModel.progress}
+        />
+      )}
     </div>
   )
 }

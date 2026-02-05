@@ -3,6 +3,7 @@ import { ingestFile, isFileSupported } from '../core/ingest'
 import { saveDoc, getAllDocs, saveChunk, getChunksByDocId, deleteDoc } from '../core/storage/db'
 import { chunkPages } from '../core/chunk/chunker'
 import { rebuildLexicalIndex } from '../core/rank'
+import { buildVectorIndex } from '../core/index_vec'
 import type { Doc } from '../core/types'
 import './Sources.css'
 
@@ -71,13 +72,21 @@ function Sources() {
         setUploadProgress({ fileName: file.name, stage: 'Chunking...' })
         const chunks = chunkPages(pages)
 
-        setUploadProgress({ fileName: file.name, stage: 'Indexing...' })
+        setUploadProgress({ fileName: file.name, stage: 'Saving chunks...' })
         for (const chunk of chunks) {
           await saveChunk(chunk)
         }
 
+        setUploadProgress({
+          fileName: file.name,
+          stage: `Generating embeddings (${chunks.length} chunks)...`,
+        })
+        // Pre-compute vector embeddings for all chunks
+        await buildVectorIndex(chunks)
+
         // Update doc status
         doc.status.indexedLexical = false
+        doc.status.indexedVector = true // Mark vector embeddings as generated
         await saveDoc(doc)
       }
 

@@ -47,12 +47,15 @@ export interface Citation {
 // Search and retrieval types
 
 export type SearchMode = 'lexical' | 'semantic' | 'hybrid'
+export type ChatMode = 'search' | 'chat'
 
 export interface SearchQuery {
   text: string
   mode: SearchMode
   topK?: number
   alpha?: number // for hybrid: semantic weight (0-1)
+  chatMode?: ChatMode
+  polish?: boolean // enable answer polishing with flan-t5
 }
 
 export interface SearchResult {
@@ -60,11 +63,14 @@ export interface SearchResult {
   citations: Citation[]
   scores: number[]
   latency: LatencyStats
+  generatedAnswer?: string
 }
 
 export interface LatencyStats {
   embedding?: number
   retrieval: number
+  generation?: number
+  polish?: number
   total: number
 }
 
