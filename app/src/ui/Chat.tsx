@@ -11,7 +11,33 @@ import {
 import type { SearchResult, SearchMode, ChatMode } from '../core/types'
 import ModelSelector from './ModelSelector'
 import ModelLoadingOverlay from './ModelLoadingOverlay'
-import './Chat.css'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import { Slider } from '@/components/ui/slider'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Search,
+  MessageCircle,
+  Sparkles,
+  Bot,
+  BarChart3,
+  Send,
+  Loader2,
+  Upload,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ChatMessage {
   id: string
@@ -31,8 +57,8 @@ function Chat() {
   const [query, setQuery] = useState('')
   const [searchMode, setSearchMode] = useState<SearchMode>('hybrid')
   const [chatMode, setChatMode] = useState<ChatMode>('chat')
-  const [alpha, setAlpha] = useState(0.5) // For hybrid: semantic weight
-  const [polish, setPolish] = useState(false) // For answer polishing
+  const [alpha, setAlpha] = useState(0.5)
+  const [polish, setPolish] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [messageState, setMessageState] = useState<MessageState>({})
   const [searching, setSearching] = useState(false)
@@ -69,16 +95,14 @@ function Chat() {
       progress: 0,
     })
 
-    // Set a timeout to prevent infinite loading
     const timeoutId = setTimeout(() => {
       console.warn('Model loading timeout')
       setLoadingModel(null)
       setError(`Timeout loading ${modelConfig.name}. Check console for errors.`)
-    }, 120000) // 2 minute timeout
+    }, 120000)
 
     try {
       await initGenerationModel(newModelId, (progress) => {
-        console.log('Progress update:', progress)
         setLoadingModel({
           modelName: modelConfig.name,
           status: progress.status,
@@ -90,14 +114,15 @@ function Chat() {
       setCurrentModelId(newModelId)
       localStorage.setItem('selectedModelId', newModelId)
 
-      // Hide loading after a brief delay
       setTimeout(() => {
         setLoadingModel(null)
       }, 800)
     } catch (error) {
       clearTimeout(timeoutId)
       console.error('Failed to load model:', error)
-      setError(`Failed to load ${modelConfig.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setError(
+        `Failed to load ${modelConfig.name}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
       setLoadingModel(null)
     }
   }
@@ -180,131 +205,180 @@ function Chat() {
   }
 
   return (
-    <div className="chat">
-      <div className="chat-header">
-        <h2>Chat</h2>
-        <div className="header-controls">
-          <div className="chat-mode-toggle">
-            <button
-              className={`mode-btn ${chatMode === 'search' ? 'active' : ''}`}
-              onClick={() => setChatMode('search')}
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex flex-col gap-3 border-b p-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Chat</h2>
+          <div className="flex items-center gap-2">
+            {/* Chat/Search Mode Toggle */}
+            <Tabs value={chatMode} onValueChange={(v) => setChatMode(v as ChatMode)}>
+              <TabsList className="h-9">
+                <TabsTrigger value="search" className="gap-1.5 text-xs">
+                  <Search className="h-3.5 w-3.5" />
+                  Search
+                </TabsTrigger>
+                <TabsTrigger value="chat" className="gap-1.5 text-xs">
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Chat
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {/* Polish Toggle */}
+            {chatMode === 'chat' && (
+              <Button
+                variant={polish ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setPolish(!polish)}
+                className="gap-1.5"
+                title="Polish answers for better fluency"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Polish
+              </Button>
+            )}
+
+            {/* Search Mode Select */}
+            <Select value={searchMode} onValueChange={(v) => setSearchMode(v as SearchMode)}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="lexical">Lexical (BM25)</SelectItem>
+                <SelectItem value="semantic">Semantic</SelectItem>
+                <SelectItem value="hybrid">Hybrid</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Model Selector Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowModelSelector(true)}
+              className="gap-1.5"
+              title="Change AI model"
             >
-              🔍 Search
-            </button>
-            <button
-              className={`mode-btn ${chatMode === 'chat' ? 'active' : ''}`}
-              onClick={() => setChatMode('chat')}
+              <Bot className="h-3.5 w-3.5" />
+              {getModelById(currentModelId)?.name || 'Model'}
+            </Button>
+
+            {/* Performance Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => setShowPerf(!showPerf)}
+              title="Toggle performance stats"
             >
-              💬 Chat
-            </button>
+              <BarChart3 className="h-4 w-4" />
+            </Button>
           </div>
-          {chatMode === 'chat' && (
-            <button
-              className={`mode-btn ${polish ? 'active' : ''}`}
-              onClick={() => setPolish(!polish)}
-              title="Polish answers for better fluency"
-            >
-              ✨ Polish
-            </button>
-          )}
-          <div className="search-mode">
-            <select
-              value={searchMode}
-              onChange={(e) => setSearchMode(e.target.value as SearchMode)}
-            >
-              <option value="lexical">Lexical (BM25)</option>
-              <option value="semantic">Semantic (Embeddings)</option>
-              <option value="hybrid">Hybrid (Best of Both)</option>
-            </select>
-          </div>
-          <button
-            className="model-selector-btn"
-            onClick={() => setShowModelSelector(true)}
-            title="Change AI model"
-          >
-            🤖 {getModelById(currentModelId)?.name || 'Model'}
-          </button>
-          <button
-            className="perf-toggle"
-            onClick={() => setShowPerf(!showPerf)}
-            title="Toggle performance stats"
-          >
-            📊
-          </button>
         </div>
+
+        {/* Alpha Slider for Hybrid Mode */}
         {searchMode === 'hybrid' && (
-          <div className="alpha-slider-container">
-            <label>
-              <span>Semantic weight: {Math.round(alpha * 100)}%</span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={alpha}
-                onChange={(e) => setAlpha(parseFloat(e.target.value))}
-                className="alpha-slider"
-              />
-            </label>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Semantic weight:</span>
+              <span className="font-medium">{Math.round(alpha * 100)}%</span>
+            </div>
+            <Slider
+              value={[alpha]}
+              onValueChange={(v) => setAlpha(v[0])}
+              min={0}
+              max={1}
+              step={0.1}
+              className="w-full"
+            />
           </div>
         )}
       </div>
 
-      <div className="chat-content">
+      {/* Error Alert */}
+      {error && (
+        <div className="p-4">
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4">
         {!hasDocuments && messages.length === 0 ? (
-          <div className="chat-empty">
-            <div className="upload-icon">📤</div>
-            <h3>Add a source to get started</h3>
-            <p>Upload PDFs, text files, or markdown documents in the Sources panel</p>
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <Upload className="mb-4 h-16 w-16 text-muted-foreground/20" />
+            <h3 className="mb-2 text-lg font-semibold">Add a source to get started</h3>
+            <p className="text-sm text-muted-foreground">
+              Upload PDFs, text files, or markdown documents in the Sources panel
+            </p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="chat-empty">
-            <div className="upload-icon">🔍</div>
-            <h3>Ask anything about your documents</h3>
-            <p>Type a question below to search using BM25</p>
+          <div className="flex h-full flex-col items-center justify-center text-center">
+            <Search className="mb-4 h-16 w-16 text-muted-foreground/20" />
+            <h3 className="mb-2 text-lg font-semibold">Ask anything about your documents</h3>
+            <p className="text-sm text-muted-foreground">Type a question below to search</p>
           </div>
         ) : (
-          <div className="messages-container">
+          <div className="space-y-4">
             {messages.map((message) => (
-              <div key={message.id} className={`message message-${message.type}`}>
+              <div
+                key={message.id}
+                className={cn('flex', message.type === 'user' ? 'justify-end' : 'justify-start')}
+              >
                 {message.type === 'user' ? (
-                  <div className="message-bubble user-bubble">
-                    <p>{message.text}</p>
+                  <div className="max-w-[80%] rounded-lg bg-primary px-4 py-2 text-primary-foreground">
+                    <p className="text-sm">{message.text}</p>
                   </div>
                 ) : (
-                  <div className="message-bubble assistant-bubble">
+                  <div className="max-w-[90%] space-y-3">
                     {message.result ? (
-                      <div className="search-results">
+                      <>
+                        {/* Generated Answer */}
                         {message.result.generatedAnswer && (
-                          <div className="generated-answer">
-                            <p>{message.result.generatedAnswer}</p>
-                          </div>
+                          <Card className="p-4">
+                            <p className="text-sm leading-relaxed">{message.result.generatedAnswer}</p>
+                          </Card>
                         )}
-                        <div className="results-header">
-                          <span className="results-count">
+
+                        {/* Results Info */}
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span>
                             {message.result.generatedAnswer ? 'Sources: ' : 'Found '}
-                            {message.result.citations.length} results in{' '}
-                            {message.result.latency.total.toFixed(0)}ms
-                            {message.result.latency.generation && (
-                              <> (gen: {message.result.latency.generation.toFixed(0)}ms)</>
-                            )}
-                            {message.result.latency.polish && (
-                              <> (polish: {message.result.latency.polish.toFixed(0)}ms)</>
-                            )}
+                            {message.result.citations.length} results
                           </span>
+                          <span>•</span>
+                          <span>{message.result.latency.total.toFixed(0)}ms</span>
+                          {message.result.latency.generation && (
+                            <>
+                              <span>•</span>
+                              <span>gen: {message.result.latency.generation.toFixed(0)}ms</span>
+                            </>
+                          )}
+                          {message.result.latency.polish && (
+                            <>
+                              <span>•</span>
+                              <span>polish: {message.result.latency.polish.toFixed(0)}ms</span>
+                            </>
+                          )}
                           {showPerf && (() => {
                             const stats = getLatencyStats()
                             return (
-                              <div className="perf-stats">
+                              <>
+                                <span>•</span>
                                 <span>p50: {stats.p50.toFixed(0)}ms</span>
+                                <span>•</span>
                                 <span>p95: {stats.p95.toFixed(0)}ms</span>
+                                <span>•</span>
                                 <span>avg: {stats.mean.toFixed(0)}ms</span>
                                 <span>({stats.count} queries)</span>
-                              </div>
+                              </>
                             )
                           })()}
                         </div>
 
+                        {/* Citations */}
                         {(() => {
                           const showAll = messageState[message.id]?.showAllSources
                           const defaultLimit = message.result.generatedAnswer ? 3 : 5
@@ -314,94 +388,119 @@ function Chat() {
                           const hasMore = message.result.citations.length > defaultLimit
 
                           return (
-                            <>
+                            <div className="space-y-2">
                               {message.result.generatedAnswer && !showAll ? (
-                                <div className="citation-badges">
+                                <div className="flex flex-wrap gap-2">
                                   {visibleCitations.map((citation, idx) => (
-                                    <div key={citation.chunkId} className="citation-badge" title={citation.text}>
-                                      <span className="badge-number">[{idx + 1}]</span>
-                                      <span className="badge-info">
+                                    <Badge
+                                      key={citation.chunkId}
+                                      variant="secondary"
+                                      className="gap-1 text-xs"
+                                      title={citation.text}
+                                    >
+                                      <span className="font-semibold">[{idx + 1}]</span>
+                                      <span>
                                         {citation.docName} · p{citation.pageNumber}
                                       </span>
-                                    </div>
+                                    </Badge>
                                   ))}
                                 </div>
                               ) : (
                                 visibleCitations.map((citation, idx) => (
-                                  <div key={citation.chunkId} className="result-card">
-                                    <div className="result-header">
-                                      <span className="result-rank">#{idx + 1}</span>
-                                      <span className="result-doc">{citation.docName}</span>
-                                      <span className="result-page">Page {citation.pageNumber}</span>
+                                  <Card key={citation.chunkId} className="p-3">
+                                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                                      <Badge variant="outline" className="font-semibold">
+                                        #{idx + 1}
+                                      </Badge>
+                                      <span className="font-medium">{citation.docName}</span>
+                                      <span className="text-muted-foreground">
+                                        Page {citation.pageNumber}
+                                      </span>
                                       {citation.score !== undefined && (
-                                        <span className="result-score">
-                                          Score: {citation.score.toFixed(2)}
-                                        </span>
+                                        <Badge variant="secondary" className="ml-auto">
+                                          {citation.score.toFixed(2)}
+                                        </Badge>
                                       )}
                                     </div>
-                                    <p className="result-text">{citation.text}</p>
-                                  </div>
+                                    <p className="text-sm leading-relaxed text-muted-foreground">
+                                      {citation.text}
+                                    </p>
+                                  </Card>
                                 ))
                               )}
 
                               {hasMore && (
-                                <button
-                                  className="show-all-sources-btn"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   onClick={() => toggleShowAllSources(message.id)}
+                                  className="w-full gap-2"
                                 >
-                                  {showAll
-                                    ? '↑ Show less'
-                                    : `↓ Show all ${message.result.citations.length} sources`}
-                                </button>
+                                  {showAll ? (
+                                    <>
+                                      <ChevronUp className="h-4 w-4" />
+                                      Show less
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronDown className="h-4 w-4" />
+                                      Show all {message.result.citations.length} sources
+                                    </>
+                                  )}
+                                </Button>
                               )}
-                            </>
+                            </div>
                           )
                         })()}
-                      </div>
+                      </>
                     ) : (
-                      <p>{message.text}</p>
+                      <Card className="p-4">
+                        <p className="text-sm">{message.text}</p>
+                      </Card>
                     )}
                   </div>
                 )}
               </div>
             ))}
+
+            {/* Searching Indicator */}
             {searching && (
-              <div className="message message-assistant">
-                <div className="message-bubble assistant-bubble typing">
-                  <span>Searching...</span>
-                </div>
+              <div className="flex justify-start">
+                <Card className="flex items-center gap-2 p-4">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Searching...</span>
+                </Card>
               </div>
             )}
+
             <div ref={messagesEndRef} />
           </div>
         )}
-
-        {error && (
-          <div className="error-banner">
-            <span>⚠️ {error}</span>
-          </div>
-        )}
       </div>
 
-      <div className="chat-input-container">
-        <input
-          type="text"
-          className="chat-input"
-          placeholder={hasDocuments ? 'Ask anything...' : 'Upload a source to get started'}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyPress={handleKeyPress}
-          disabled={!hasDocuments || searching}
-        />
-        <button
-          className="btn-send"
-          onClick={handleSearch}
-          disabled={!hasDocuments || !query.trim() || searching}
-        >
-          {searching ? '⏳' : '➤'}
-        </button>
+      {/* Input Area */}
+      <div className="border-t p-4">
+        <div className="flex gap-2">
+          <Input
+            type="text"
+            placeholder={hasDocuments ? 'Ask anything...' : 'Upload a source to get started'}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={!hasDocuments || searching}
+            className="flex-1"
+          />
+          <Button
+            onClick={handleSearch}
+            disabled={!hasDocuments || !query.trim() || searching}
+            size="icon"
+          >
+            {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
 
+      {/* Modals */}
       {showModelSelector && (
         <ModelSelector
           currentModelId={currentModelId}

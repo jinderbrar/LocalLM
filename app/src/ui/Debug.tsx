@@ -2,22 +2,39 @@ import { useState, useEffect } from 'react'
 import { debugLogger } from '../core/debug'
 import type { DebugEvent } from '../core/debug'
 import PromptEditor from './PromptEditor'
-import './Debug.css'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Search,
+  Radio,
+  CheckCircle2,
+  FileText,
+  Bot,
+  MessageSquare,
+  Sparkles,
+  Gem,
+  Send,
+  Star,
+  Flag,
+  AlertCircle,
+  Pin,
+  Trash2,
+  ChevronRight,
+  ChevronDown,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 function Debug() {
   const [events, setEvents] = useState<DebugEvent[]>([])
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'logs' | 'prompts'>('logs')
 
   useEffect(() => {
-    // Subscribe to debug events
     const unsubscribe = debugLogger.subscribe((newEvents) => {
       setEvents(newEvents)
     })
-
-    // Load existing events
     setEvents(debugLogger.getEvents())
-
     return unsubscribe
   }, [])
 
@@ -45,262 +62,182 @@ function Debug() {
       .join(' ')
   }
 
-  const getEventIcon = (type: string): string => {
-    switch (type) {
-      case 'query_start':
-        return '🔍'
-      case 'retrieval_start':
-        return '📡'
-      case 'retrieval_complete':
-        return '✅'
-      case 'context_built':
-        return '📝'
-      case 'generation_start':
-        return '🤖'
-      case 'prompt_sent':
-        return '💬'
-      case 'generation_complete':
-        return '✨'
-      case 'polish_start':
-        return '💎'
-      case 'polish_prompt_sent':
-        return '📨'
-      case 'polish_complete':
-        return '🌟'
-      case 'query_complete':
-        return '🏁'
-      case 'error':
-        return '❌'
-      default:
-        return '📌'
+  const getEventIcon = (type: string) => {
+    const icons: Record<string, any> = {
+      query_start: Search,
+      retrieval_start: Radio,
+      retrieval_complete: CheckCircle2,
+      context_built: FileText,
+      generation_start: Bot,
+      prompt_sent: MessageSquare,
+      generation_complete: Sparkles,
+      polish_start: Gem,
+      polish_prompt_sent: Send,
+      polish_complete: Star,
+      query_complete: Flag,
+      error: AlertCircle,
     }
+    const Icon = icons[type] || Pin
+    return <Icon className="h-4 w-4" />
   }
 
   const renderEventData = (event: DebugEvent) => {
     const isExpanded = expandedEvents.has(event.id)
 
-    switch (event.type) {
-      case 'query_start':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Query:</strong> {event.data.query}
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div>
-                  <strong>Mode:</strong> {event.data.mode}
-                </div>
-                <div>
-                  <strong>Chat Mode:</strong> {event.data.chatMode}
-                </div>
+    const renderDetails = () => {
+      switch (event.type) {
+        case 'query_start':
+          return (
+            <>
+              <div className="text-sm">
+                <span className="font-medium">Query:</span> {event.data.query}
               </div>
-            )}
-          </div>
-        )
+              {isExpanded && (
+                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                  <div>Mode: {event.data.mode}</div>
+                  <div>Chat Mode: {event.data.chatMode}</div>
+                </div>
+              )}
+            </>
+          )
 
-      case 'retrieval_complete':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Results:</strong> {event.data.resultsCount} chunks retrieved
-              {event.duration && <span> ({event.duration.toFixed(0)}ms)</span>}
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div>
-                  <strong>Mode:</strong> {event.data.mode}
-                </div>
-                <div>
-                  <strong>TopK:</strong> {event.data.topK}
-                </div>
-                {event.data.alpha !== undefined && (
-                  <div>
-                    <strong>Alpha:</strong> {event.data.alpha}
-                  </div>
-                )}
-                <div className="chunks-list">
-                  <strong>Chunks:</strong>
-                  {event.data.chunks.map((chunk: any, idx: number) => (
-                    <div key={chunk.id} className="chunk-item">
-                      <div className="chunk-header">
-                        <span className="chunk-rank">#{idx + 1}</span>
-                        <span className="chunk-doc">{chunk.docName}</span>
-                        <span className="chunk-page">p{chunk.pageNumber}</span>
-                        <span className="chunk-score">
-                          {chunk.score.toFixed(3)}
-                        </span>
-                      </div>
-                      <div className="chunk-text">
-                        {chunk.text.substring(0, 150)}
-                        {chunk.text.length > 150 && '...'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )
-
-      case 'context_built':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Context:</strong> {event.data.contextLength} chars from{' '}
-              {event.data.chunksUsed} chunks
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div className="context-preview">
-                  <strong>Context Preview:</strong>
-                  <pre className="code-block">{event.data.contextPreview}</pre>
-                </div>
-              </div>
-            )}
-          </div>
-        )
-
-      case 'prompt_sent':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Prompt:</strong> {event.data.promptLength} chars to{' '}
-              {event.data.modelId || 'model'}
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div>
-                  <strong>Model:</strong> {event.data.modelId}
-                </div>
-                <div>
-                  <strong>Type:</strong> {event.data.modelType}
-                </div>
-                {event.data.temperature !== undefined && (
-                  <div>
-                    <strong>Temperature:</strong> {event.data.temperature}
-                  </div>
-                )}
-                <div className="prompt-preview">
-                  <strong>Full Prompt:</strong>
-                  <pre className="code-block">{event.data.prompt}</pre>
-                </div>
-              </div>
-            )}
-          </div>
-        )
-
-      case 'generation_complete':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Generated:</strong> {event.data.answerLength} chars
-              {event.duration && <span> ({event.duration.toFixed(0)}ms)</span>}
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div className="answer-preview">
-                  <strong>Answer:</strong>
-                  <pre className="code-block">{event.data.answer}</pre>
-                </div>
-                {event.data.rawOutput && (
-                  <div className="raw-output">
-                    <strong>Raw Output:</strong>
-                    <pre className="code-block">{event.data.rawOutput}</pre>
-                  </div>
+        case 'retrieval_complete':
+          return (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">Results:</span>
+                <Badge variant="secondary">{event.data.resultsCount} chunks</Badge>
+                {event.duration && (
+                  <Badge variant="outline">{event.duration.toFixed(0)}ms</Badge>
                 )}
               </div>
-            )}
-          </div>
-        )
-
-      case 'polish_start':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Polishing:</strong> Improving answer fluency
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div className="extractive-answer">
-                  <strong>Original Answer:</strong>
-                  <pre className="code-block">{event.data.extractiveAnswer}</pre>
+              {isExpanded && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex gap-2 text-xs">
+                    <Badge variant="outline">Mode: {event.data.mode}</Badge>
+                    <Badge variant="outline">TopK: {event.data.topK}</Badge>
+                    {event.data.alpha !== undefined && (
+                      <Badge variant="outline">Alpha: {event.data.alpha}</Badge>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {event.data.chunks?.map((chunk: any, idx: number) => (
+                      <Card key={chunk.id} className="p-2">
+                        <div className="mb-1 flex items-center gap-2 text-xs">
+                          <Badge className="h-5">{idx + 1}</Badge>
+                          <span className="flex-1 font-medium">{chunk.docName}</span>
+                          <span className="text-muted-foreground">p{chunk.pageNumber}</span>
+                          <Badge variant="secondary">{chunk.score.toFixed(3)}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {chunk.text.substring(0, 150)}
+                          {chunk.text.length > 150 && '...'}
+                        </p>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
+              )}
+            </>
+          )
+
+        case 'context_built':
+          return (
+            <>
+              <div className="text-sm">
+                <span className="font-medium">Context:</span> {event.data.contextLength} chars from{' '}
+                {event.data.chunksUsed} chunks
               </div>
-            )}
-          </div>
-        )
+              {isExpanded && event.data.contextPreview && (
+                <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                  {event.data.contextPreview}
+                </pre>
+              )}
+            </>
+          )
 
-      case 'polish_prompt_sent':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Polish Prompt:</strong> {event.data.promptLength} chars
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div className="prompt-preview">
-                  <strong>Full Prompt:</strong>
-                  <pre className="code-block">{event.data.prompt}</pre>
-                </div>
+        case 'prompt_sent':
+          return (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">Prompt:</span>
+                <Badge variant="secondary">{event.data.promptLength} chars</Badge>
+                <Badge variant="outline">{event.data.modelId}</Badge>
               </div>
-            )}
-          </div>
-        )
+              {isExpanded && event.data.prompt && (
+                <pre className="mt-2 overflow-x-auto rounded-md bg-slate-950 p-3 text-xs text-slate-50 dark:bg-slate-900">
+                  {event.data.prompt}
+                </pre>
+              )}
+            </>
+          )
 
-      case 'polish_complete':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Polished:</strong> {event.data.answerLength} chars
-              {event.duration && <span> ({event.duration.toFixed(0)}ms)</span>}
-            </div>
-            {isExpanded && (
-              <div className="event-details">
-                <div className="polished-answer">
-                  <strong>Polished Answer:</strong>
-                  <pre className="code-block">{event.data.polishedAnswer}</pre>
-                </div>
+        case 'generation_complete':
+          return (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">Generated:</span>
+                <Badge variant="secondary">{event.data.answerLength} chars</Badge>
+                {event.duration && (
+                  <Badge variant="outline">{event.duration.toFixed(0)}ms</Badge>
+                )}
               </div>
-            )}
-          </div>
-        )
+              {isExpanded && event.data.answer && (
+                <Card className="mt-2 p-3">
+                  <p className="text-sm">{event.data.answer}</p>
+                </Card>
+              )}
+            </>
+          )
 
-      case 'query_complete':
-        return (
-          <div className="event-data">
-            <div className="event-summary">
-              <strong>Complete:</strong> Total time {event.duration?.toFixed(0)}ms
-            </div>
-          </div>
-        )
-
-      case 'error':
-        return (
-          <div className="event-data error">
-            <div className="event-summary">
-              <strong>Error:</strong> {event.data.error}
-            </div>
-            {isExpanded && event.data.stack && (
-              <div className="event-details">
-                <div className="error-stack">
-                  <strong>Stack:</strong>
-                  <pre className="code-block">{event.data.stack}</pre>
-                </div>
+        case 'polish_complete':
+          return (
+            <>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-medium">Polished:</span>
+                <Badge variant="secondary">{event.data.answerLength} chars</Badge>
+                {event.duration && (
+                  <Badge variant="outline">{event.duration.toFixed(0)}ms</Badge>
+                )}
               </div>
-            )}
-          </div>
-        )
+              {isExpanded && event.data.polishedAnswer && (
+                <Card className="mt-2 p-3">
+                  <p className="text-sm">{event.data.polishedAnswer}</p>
+                </Card>
+              )}
+            </>
+          )
 
-      default:
-        return (
-          <div className="event-data">
-            <div className="event-summary">
+        case 'query_complete':
+          return (
+            <div className="text-sm">
+              <span className="font-medium">Complete:</span> Total time{' '}
+              {event.duration?.toFixed(0)}ms
+            </div>
+          )
+
+        case 'error':
+          return (
+            <>
+              <div className="text-sm font-medium text-destructive">{event.data.error}</div>
+              {isExpanded && event.data.stack && (
+                <pre className="mt-2 overflow-x-auto rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+                  {event.data.stack}
+                </pre>
+              )}
+            </>
+          )
+
+        default:
+          return (
+            <div className="text-sm text-muted-foreground">
               {JSON.stringify(event.data).substring(0, 100)}
             </div>
-          </div>
-        )
+          )
+      }
     }
+
+    return renderDetails()
   }
 
   // Group events by query
@@ -319,104 +256,107 @@ function Debug() {
   const queryIds = Object.keys(groupedEvents).reverse()
 
   return (
-    <div className="debug">
-      <div className="debug-header">
-        <h2>Debug Console</h2>
-        <div className="debug-tabs">
-          <button
-            className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`}
-            onClick={() => setActiveTab('logs')}
-          >
-            📋 Logs
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'prompts' ? 'active' : ''}`}
-            onClick={() => setActiveTab('prompts')}
-          >
-            ✏️ Prompts
-          </button>
-        </div>
-        <button className="btn-clear" onClick={clearLogs} title="Clear logs">
-          🗑️
-        </button>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b p-4">
+        <h2 className="text-lg font-semibold">Debug Console</h2>
+        <Button variant="ghost" size="icon" onClick={clearLogs} title="Clear logs">
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
 
-      <div className="debug-content">
-        {activeTab === 'logs' ? (
-          <div className="logs-panel">
-            {queryIds.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">📊</div>
-                <p>No logs yet. Execute a search query to see debug information.</p>
-              </div>
-            ) : (
-              <div className="queries-list">
-                {queryIds.map((queryId) => {
-                  const queryEvents = groupedEvents[queryId]
-                  const firstEvent = queryEvents[0]
-                  const lastEvent = queryEvents[queryEvents.length - 1]
-                  const isQueryExpanded = expandedEvents.has(queryId)
+      <Tabs defaultValue="logs" className="flex flex-1 flex-col overflow-hidden">
+        <TabsList className="mx-4 mt-4">
+          <TabsTrigger value="logs" className="gap-2">
+            <FileText className="h-4 w-4" />
+            Logs
+          </TabsTrigger>
+          <TabsTrigger value="prompts" className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Prompts
+          </TabsTrigger>
+        </TabsList>
 
-                  return (
-                    <div key={queryId} className="query-group">
-                      <div
-                        className="query-header"
-                        onClick={() => toggleExpanded(queryId)}
-                      >
-                        <span className="query-icon">
-                          {isQueryExpanded ? '▼' : '▶'}
-                        </span>
-                        <span className="query-info">
-                          <strong>{firstEvent.data.query || 'Query'}</strong>
-                          <span className="query-meta">
-                            {' '}
-                            • {new Date(firstEvent.timestamp).toLocaleTimeString()}{' '}
-                            • {queryEvents.length} events
-                            {lastEvent.duration &&
-                              ` • ${lastEvent.duration.toFixed(0)}ms`}
-                          </span>
-                        </span>
+        <TabsContent value="logs" className="flex-1 overflow-y-auto p-4 pt-2">
+          {queryIds.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <BarChart3 className="mb-4 h-16 w-16 text-muted-foreground/20" />
+              <p className="text-sm text-muted-foreground">
+                No logs yet. Execute a search query to see debug information.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {queryIds.map((queryId) => {
+                const queryEvents = groupedEvents[queryId]
+                const firstEvent = queryEvents[0]
+                const lastEvent = queryEvents[queryEvents.length - 1]
+                const isQueryExpanded = expandedEvents.has(queryId)
+
+                return (
+                  <Card key={queryId} className="overflow-hidden">
+                    <button
+                      onClick={() => toggleExpanded(queryId)}
+                      className="flex w-full items-center gap-2 p-3 text-left transition-colors hover:bg-accent"
+                    >
+                      {isQueryExpanded ? (
+                        <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{firstEvent.data.query || 'Query'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(firstEvent.timestamp).toLocaleTimeString()} • {queryEvents.length}{' '}
+                          events
+                          {lastEvent.duration && ` • ${lastEvent.duration.toFixed(0)}ms`}
+                        </p>
                       </div>
-                      {isQueryExpanded && (
-                        <div className="events-list">
-                          {queryEvents.map((event) => (
-                            <div key={event.id} className="event-item">
-                              <div
-                                className="event-header"
-                                onClick={() => toggleExpanded(event.id)}
-                              >
-                                <span className="event-icon">
-                                  {getEventIcon(event.type)}
-                                </span>
-                                <span className="event-type">
+                    </button>
+
+                    {isQueryExpanded && (
+                      <div className="space-y-2 border-t p-3 pt-2">
+                        {queryEvents.map((event) => (
+                          <Card key={event.id} className="overflow-hidden">
+                            <button
+                              onClick={() => toggleExpanded(event.id)}
+                              className="flex w-full items-center gap-2 p-2 text-left transition-colors hover:bg-accent"
+                            >
+                              <div className="flex items-center gap-2">
+                                {getEventIcon(event.type)}
+                                <span className="text-sm font-medium">
                                   {formatEventType(event.type)}
                                 </span>
-                                <span className="event-time">
-                                  {new Date(event.timestamp).toLocaleTimeString()}
-                                </span>
-                                <span className="event-expand">
-                                  {expandedEvents.has(event.id) ? '▼' : '▶'}
-                                </span>
                               </div>
-                              {renderEventData(event)}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="prompts-panel">
-            <PromptEditor />
-          </div>
-        )}
-      </div>
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                {new Date(event.timestamp).toLocaleTimeString()}
+                              </span>
+                              {expandedEvents.has(event.id) ? (
+                                <ChevronDown className="h-3 w-3" />
+                              ) : (
+                                <ChevronRight className="h-3 w-3" />
+                              )}
+                            </button>
+                            <div className="px-4 pb-3">{renderEventData(event)}</div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="prompts" className="flex-1 overflow-hidden">
+          <PromptEditor />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
+
+// Add missing import
+import { BarChart3 } from 'lucide-react'
 
 export default Debug

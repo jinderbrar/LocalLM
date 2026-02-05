@@ -5,7 +5,13 @@ import { chunkPages } from '../core/chunk/chunker'
 import { rebuildLexicalIndex } from '../core/rank'
 import { buildVectorIndex } from '../core/index_vec'
 import type { Doc } from '../core/types'
-import './Sources.css'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Progress } from '@/components/ui/progress'
+import { FileText, FileCode, File, Loader2, X, Trash2, Plus } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 function Sources() {
   const [docs, setDocs] = useState<Doc[]>([])
@@ -28,7 +34,6 @@ function Sources() {
       const allDocs = await getAllDocs()
       setDocs(allDocs.sort((a, b) => b.uploadedAt - a.uploadedAt))
 
-      // Load chunk counts for each document
       const counts: Record<string, number> = {}
       for (const doc of allDocs) {
         const chunks = await getChunksByDocId(doc.id)
@@ -50,9 +55,7 @@ function Sources() {
 
     try {
       for (const file of Array.from(files)) {
-        if (abortControllerRef.current?.signal.aborted) {
-          break
-        }
+        if (abortControllerRef.current?.signal.aborted) break
 
         if (!isFileSupported(file)) {
           setError(`Unsupported file: ${file.name}`)
@@ -62,9 +65,7 @@ function Sources() {
         setUploadProgress({ fileName: file.name, stage: 'Parsing...' })
         const { doc, pages } = await ingestFile(file)
 
-        if (abortControllerRef.current?.signal.aborted) {
-          break
-        }
+        if (abortControllerRef.current?.signal.aborted) break
 
         setUploadProgress({ fileName: file.name, stage: 'Saving...' })
         await saveDoc(doc)
@@ -81,20 +82,16 @@ function Sources() {
           fileName: file.name,
           stage: `Generating embeddings (${chunks.length} chunks)...`,
         })
-        // Pre-compute vector embeddings for all chunks
         await buildVectorIndex(chunks)
 
-        // Update doc status
         doc.status.indexedLexical = false
-        doc.status.indexedVector = true // Mark vector embeddings as generated
+        doc.status.indexedVector = true
         await saveDoc(doc)
       }
 
-      // Rebuild lexical index for all documents
       setUploadProgress({ fileName: 'all documents', stage: 'Building search index...' })
       await rebuildLexicalIndex()
 
-      // Update all docs to mark them as indexed
       const allDocs = await getAllDocs()
       for (const doc of allDocs) {
         if (!doc.status.indexedLexical) {
@@ -121,9 +118,7 @@ function Sources() {
   }
 
   function handleCancelUpload() {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
+    abortControllerRef.current?.abort()
   }
 
   function handleAddSourceClick() {
@@ -137,7 +132,7 @@ function Sources() {
 
     try {
       await deleteDoc(docId)
-      await rebuildLexicalIndex() // Rebuild index after deletion
+      await rebuildLexicalIndex()
       await loadDocs()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete document')
@@ -145,14 +140,23 @@ function Sources() {
   }
 
   return (
-    <div className="sources">
-      <div className="sources-header">
-        <h2>Sources</h2>
-        <div className="sources-actions">
-          <button className="btn btn-primary" onClick={handleAddSourceClick} disabled={uploading}>
-            {uploading ? '⏳ Uploading...' : '+ Add source'}
-          </button>
-        </div>
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex flex-col gap-3 border-b p-4">
+        <h2 className="text-lg font-semibold">Sources</h2>
+        <Button onClick={handleAddSourceClick} disabled={uploading} className="w-full">
+          {uploading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Uploading...
+            </>
+          ) : (
+            <>
+              <Plus className="mr-2 h-4 w-4" />
+              Add source
+            </>
+          )}
+        </Button>
       </div>
 
       <input
@@ -160,75 +164,107 @@ function Sources() {
         type="file"
         accept=".txt,.md,.pdf"
         multiple
-        style={{ display: 'none' }}
+        className="hidden"
         onChange={handleFileSelect}
       />
 
+      {/* Error Alert */}
       {error && (
-        <div className="error-message">
-          <span>⚠️ {error}</span>
-          <button onClick={() => setError(null)}>✕</button>
+        <div className="p-4">
+          <Alert variant="destructive">
+            <AlertDescription className="flex items-center justify-between">
+              <span>{error}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => setError(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </AlertDescription>
+          </Alert>
         </div>
       )}
 
+      {/* Upload Progress */}
       {uploadProgress && (
-        <div className="progress-message">
-          <div className="progress-content">
-            <div className="progress-spinner">⏳</div>
-            <div>
-              <div className="progress-file">{uploadProgress.fileName}</div>
-              <div className="progress-stage">{uploadProgress.stage}</div>
+        <div className="border-b p-4">
+          <Card className="p-4">
+            <div className="mb-3 flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <div>
+                  <p className="font-medium">{uploadProgress.fileName}</p>
+                  <p className="text-sm text-muted-foreground">{uploadProgress.stage}</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleCancelUpload}>
+                Cancel
+              </Button>
             </div>
-          </div>
-          <button className="btn-cancel" onClick={handleCancelUpload}>
-            Cancel
-          </button>
+            <Progress value={undefined} className="h-1" />
+          </Card>
         </div>
       )}
 
+      {/* Documents List */}
       {docs.length === 0 ? (
-        <div className="sources-empty">
-          <div className="empty-icon">📄</div>
-          <p className="empty-title">No sources yet</p>
-          <p className="empty-subtitle">
+        <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+          <div className="mb-4 text-6xl opacity-20">📄</div>
+          <h3 className="mb-2 font-semibold">No sources yet</h3>
+          <p className="text-sm text-muted-foreground">
             Upload PDFs, text files, or markdown documents to get started
           </p>
         </div>
       ) : (
-        <div className="docs-list">
+        <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {docs.map((doc) => (
-            <div key={doc.id} className="doc-card">
-              <div className="doc-icon">{getDocIcon(doc.type)}</div>
-              <div className="doc-info">
-                <h3 className="doc-name">{doc.name}</h3>
-                <p className="doc-meta">
+            <Card
+              key={doc.id}
+              className={cn(
+                'group relative p-4 transition-colors hover:bg-accent/50',
+                'flex gap-3'
+              )}
+            >
+              <div className="flex-shrink-0 text-2xl">{getDocIcon(doc.type)}</div>
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate font-medium">{doc.name}</h3>
+                <p className="text-xs text-muted-foreground">
                   {formatFileSize(doc.size)} • {formatDate(doc.uploadedAt)}
                   {chunkCounts[doc.id] > 0 && ` • ${chunkCounts[doc.id]} chunks`}
                 </p>
-                <div className="doc-status">
-                  <span className={`status-badge ${doc.status.parsed ? 'success' : 'pending'}`}>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Badge
+                    variant={doc.status.parsed ? 'default' : 'secondary'}
+                    className="text-xs"
+                  >
                     {doc.status.parsed ? '✓' : '○'} Parsed
-                  </span>
-                  <span
-                    className={`status-badge ${doc.status.indexedLexical ? 'success' : 'pending'}`}
+                  </Badge>
+                  <Badge
+                    variant={doc.status.indexedLexical ? 'default' : 'secondary'}
+                    className="text-xs"
                   >
                     {doc.status.indexedLexical ? '✓' : '○'} Lexical
-                  </span>
-                  <span
-                    className={`status-badge ${doc.status.indexedVector ? 'success' : 'pending'}`}
+                  </Badge>
+                  <Badge
+                    variant={doc.status.indexedVector ? 'default' : 'secondary'}
+                    className="text-xs"
                   >
                     {doc.status.indexedVector ? '✓' : '○'} Vector
-                  </span>
+                  </Badge>
                 </div>
               </div>
-              <button
-                className="doc-delete-btn"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
                 onClick={() => handleDeleteDoc(doc.id, doc.name)}
                 title="Delete document"
               >
-                🗑️
-              </button>
-            </div>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </Card>
           ))}
         </div>
       )}
@@ -236,16 +272,16 @@ function Sources() {
   )
 }
 
-function getDocIcon(type: string): string {
+function getDocIcon(type: string) {
   switch (type) {
     case 'pdf':
-      return '📕'
+      return <FileText className="h-6 w-6 text-red-500" />
     case 'md':
-      return '📘'
+      return <FileCode className="h-6 w-6 text-blue-500" />
     case 'txt':
-      return '📄'
+      return <File className="h-6 w-6 text-gray-500" />
     default:
-      return '📄'
+      return <File className="h-6 w-6" />
   }
 }
 

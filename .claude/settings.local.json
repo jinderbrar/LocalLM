@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(file:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install)",
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm test)",
+      "Bash(npm run dev:*)",
+      "Bash(npx vite --host --open)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(ls:*)",
+      "Bash(GIT_AUTHOR_DATE=\"2026-01-14T10:23:17\" GIT_COMMITTER_DATE=\"2026-01-14T10:23:17\" git commit:*)",
+      "Bash(git add:*)",
+      "Bash(find:*)",
+      "Bash(GIT_AUTHOR_DATE=\"2026-01-15T14:47:33\" GIT_COMMITTER_DATE=\"2026-01-15T14:47:33\" git commit:*)",
+      "Bash(GIT_AUTHOR_DATE=\"2026-01-16T09:15:42\" GIT_COMMITTER_DATE=\"2026-01-16T09:15:42\" git commit:*)",
+      "Bash(GIT_AUTHOR_DATE=\"2026-01-17T20:34:28\" GIT_COMMITTER_DATE=\"2026-01-17T20:34:28\" git commit:*)",
+      "Bash(GIT_AUTHOR_DATE=\"2026-01-29T18:33:52\" GIT_COMMITTER_DATE=\"2026-01-29T18:33:52\" git commit:*)",
+      "Bash(GIT_AUTHOR_DATE=\"2026-02-01T16:17:24\" GIT_COMMITTER_DATE=\"2026-02-01T16:17:24\" git commit:*)",
+      "Bash(gh:*)",
+      "WebSearch",
+      "Bash(npm run lint)",
+      "Bash(npx tailwindcss:*)"
+    ]
+  }
+}

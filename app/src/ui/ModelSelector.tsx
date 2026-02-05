@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react'
 import { AVAILABLE_MODELS, isModelCached, type ModelConfig } from '../core/generate'
-import './ModelSelector.css'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { CheckCircle2, Download, AlertTriangle, Circle, CheckCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface ModelSelectorProps {
   currentModelId: string
@@ -43,92 +55,120 @@ export default function ModelSelector({
     onClose()
   }
 
-  const currentModel = AVAILABLE_MODELS.find((m) => m.id === currentModelId)
   const selectedModelConfig = AVAILABLE_MODELS.find((m) => m.id === selectedModel)
   const isSelectedCached = cachedModels.has(selectedModel)
   const needsDownload = selectedModel !== currentModelId && !isSelectedCached
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Select AI Model</h3>
-          <button className="modal-close" onClick={onClose}>
-            ✕
-          </button>
-        </div>
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Select AI Model</DialogTitle>
+        </DialogHeader>
 
-        <div className="modal-body">
+        <div className="space-y-4">
+          {/* Download Warning */}
           {needsDownload && selectedModelConfig && (
-            <div className="download-warning">
-              <span className="warning-icon">⚠️</span>
-              <div className="warning-text">
+            <Alert variant="default" className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950">
+              <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              <AlertDescription className="text-orange-800 dark:text-orange-200">
                 <strong>{selectedModelConfig.name}</strong> ({selectedModelConfig.size}) needs to be
                 downloaded. It will be cached in your browser for future use.
-              </div>
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
 
+          {/* Cached Info */}
           {!needsDownload && selectedModel !== currentModelId && selectedModelConfig && (
-            <div className="cached-info">
-              <span className="info-icon">✓</span>
-              <div className="info-text">
+            <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
+              <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <AlertDescription className="text-green-800 dark:text-green-200">
                 <strong>{selectedModelConfig.name}</strong> is already cached. Instant switch!
-              </div>
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
 
-          <div className="models-grid">
+          {/* Models Grid */}
+          <div className="grid gap-3 sm:grid-cols-2">
             {AVAILABLE_MODELS.map((model) => {
               const isCurrent = currentModelId === model.id
               const isSelected = selectedModel === model.id
               const isCached = cachedModels.has(model.id)
 
               return (
-                <div
+                <Card
                   key={model.id}
-                  className={`model-card ${isSelected ? 'selected' : ''} ${isCurrent ? 'current' : ''}`}
+                  className={cn(
+                    'relative cursor-pointer p-4 transition-all hover:shadow-md',
+                    isSelected && 'ring-2 ring-primary',
+                    isCurrent && 'border-primary'
+                  )}
                   onClick={() => setSelectedModel(model.id)}
                 >
-                  {isCurrent && <div className="current-badge">Current</div>}
-                  {!checkingCache && isCached && !isCurrent && (
-                    <div className="cached-badge">✓ Cached</div>
-                  )}
-                  <div className="model-radio">{isSelected ? '●' : '○'}</div>
-                  <h4 className="model-title">{model.name}</h4>
-                  <div className="model-size">
-                    {model.size}
-                    {!checkingCache && !isCached && (
-                      <span className="download-indicator"> • Download needed</span>
+                  {/* Status Badges */}
+                  <div className="mb-2 flex items-center gap-2">
+                    {isCurrent && (
+                      <Badge variant="default" className="text-xs">
+                        Current
+                      </Badge>
+                    )}
+                    {!checkingCache && isCached && !isCurrent && (
+                      <Badge variant="secondary" className="gap-1 text-xs">
+                        <CheckCircle className="h-3 w-3" />
+                        Cached
+                      </Badge>
                     )}
                   </div>
-                  <p className="model-description">{model.description}</p>
-                  <div className="model-strengths">
+
+                  {/* Radio Indicator */}
+                  <div className="mb-3 flex items-start gap-3">
+                    {isSelected ? (
+                      <CheckCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-primary" />
+                    ) : (
+                      <Circle className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                    )}
+                    <div className="flex-1 space-y-1">
+                      <h4 className="font-semibold">{model.name}</h4>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{model.size}</span>
+                        {!checkingCache && !isCached && (
+                          <>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Download className="h-3 w-3" />
+                              Download needed
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="mb-3 text-sm text-muted-foreground">{model.description}</p>
+
+                  {/* Strengths */}
+                  <div className="flex flex-wrap gap-1">
                     {model.strengths.map((strength, idx) => (
-                      <span key={idx} className="strength-badge">
+                      <Badge key={idx} variant="outline" className="text-xs">
                         {strength}
-                      </span>
+                      </Badge>
                     ))}
                   </div>
-                </div>
+                </Card>
               )
             })}
           </div>
         </div>
 
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn-primary"
-            onClick={handleConfirm}
-            disabled={selectedModel === currentModelId}
-          >
-            {needsDownload ? `Download & Use` : isSelectedCached ? 'Switch Model' : 'Confirm'}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+          <Button onClick={handleConfirm} disabled={selectedModel === currentModelId}>
+            {needsDownload ? 'Download & Use' : isSelectedCached ? 'Switch Model' : 'Confirm'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

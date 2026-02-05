@@ -42,3 +42,6 @@ build/
 
 # Optional eslint cache
 .eslintcache
+
+# Downloaded ML models (large binaries)
+app/public/models/
