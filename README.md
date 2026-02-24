@@ -6,7 +6,13 @@ A privacy-focused, browser-based personal search assistant that runs 100% locall
 
 This project demonstrates how to build a fully local document search and question-answering system using modern web technologies. All processing happens in the browser using WebAssembly-based ML models (Transformers.js), with no backend servers or cloud APIs required.
 
-Built with React, TypeScript, and Vite, it combines lexical search (BM25) and semantic search (vector embeddings) to provide accurate, cited answers from your documents while keeping all data completely private and offline-capable.
+It combines lexical search (BM25) and semantic search (vector embeddings) to provide accurate, cited answers from your documents while keeping all data completely private and offline-capable.
+
+---
+
+![Alt text](./reference/ui.png)
+
+---
 
 ## Getting Started
 
