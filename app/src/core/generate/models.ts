@@ -6,49 +6,25 @@ export interface ModelConfig {
   description: string
   modelPath: string
   strengths: string[]
-  task: 'question-answering' | 'text2text-generation' | 'text-generation'
+  task: 'text-generation' | 'text2text-generation' | 'question-answering'
+  quantized?: boolean
 }
 
+// Single model configuration - Flan-T5-Base for fast generative QA
 export const AVAILABLE_MODELS: ModelConfig[] = [
-  {
-    id: 'distilbert-qa',
-    name: 'DistilBERT QA',
-    size: '250MB',
-    description: 'Fast extractive QA from documents',
-    modelPath: 'Xenova/distilbert-base-cased-distilled-squad',
-    strengths: ['Fast', 'Accurate'],
-    task: 'question-answering',
-  },
-  {
-    id: 'roberta-qa',
-    name: 'RoBERTa QA',
-    size: '450MB',
-    description: 'High accuracy document QA',
-    modelPath: 'Xenova/roberta-base-squad2',
-    strengths: ['Best accuracy', 'Extractive'],
-    task: 'question-answering',
-  },
-  {
-    id: 'flan-t5-small',
-    name: 'Flan-T5 Small',
-    size: '80MB',
-    description: 'Generative answers',
-    modelPath: 'Xenova/flan-t5-small',
-    strengths: ['Fast', 'Generative'],
-    task: 'text2text-generation',
-  },
   {
     id: 'flan-t5-base',
     name: 'Flan-T5 Base',
-    size: '250MB',
-    description: 'Better generative QA',
+    size: '~250MB',
+    description: 'Fast generative question answering',
     modelPath: 'Xenova/flan-t5-base',
-    strengths: ['Quality', 'Detailed'],
-    task: 'text2text-generation',
+    strengths: ['Fast', 'Natural', 'Instruction-tuned'],
+    task: 'text-generation',
+    quantized: true,
   },
 ]
 
-export const DEFAULT_MODEL_ID = 'distilbert-qa'
+export const DEFAULT_MODEL_ID = 'flan-t5-base'
 
 export function getModelById(id: string): ModelConfig | undefined {
   return AVAILABLE_MODELS.find((m) => m.id === id)

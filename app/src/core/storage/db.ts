@@ -1,7 +1,7 @@
 import type { Doc, Chunk, Note } from '../types'
 
 const DB_NAME = 'local-notebooklm'
-const DB_VERSION = 1
+const DB_VERSION = 2 // Incremented for file blobs store
 
 // Object store names
 export const STORES = {
@@ -11,6 +11,7 @@ export const STORES = {
   NOTES: 'notes',
   LEXICAL_INDEX: 'lexical_index',
   METADATA: 'metadata',
+  FILE_BLOBS: 'file_blobs', // Store original file blobs for preview
 } as const
 
 let dbInstance: IDBDatabase | null = null
@@ -67,6 +68,11 @@ export async function initDB(): Promise<IDBDatabase> {
       // Metadata store (for system info, settings, etc.)
       if (!db.objectStoreNames.contains(STORES.METADATA)) {
         db.createObjectStore(STORES.METADATA)
+      }
+
+      // File blobs store (for original PDF files)
+      if (!db.objectStoreNames.contains(STORES.FILE_BLOBS)) {
+        db.createObjectStore(STORES.FILE_BLOBS, { keyPath: 'docId' })
       }
     }
   })
@@ -166,8 +172,9 @@ export async function getAllDocs(): Promise<Doc[]> {
 }
 
 export async function deleteDoc(id: string): Promise<void> {
-  // Delete doc and all associated chunks and vectors
+  // Delete doc and all associated chunks, vectors, and file blob
   await remove(STORES.DOCS, id)
+  await deleteFileBlob(id) // Delete the original file blob
   const chunks = await getChunksByDocId(id)
   for (const chunk of chunks) {
     await remove(STORES.CHUNKS, chunk.id)
@@ -216,11 +223,26 @@ export async function deleteNote(id: string): Promise<void> {
   return remove(STORES.NOTES, id)
 }
 
+// File blob operations (for PDF preview)
+export async function saveFileBlob(docId: string, blob: Blob): Promise<void> {
+  return put(STORES.FILE_BLOBS, { docId, blob })
+}
+
+export async function getFileBlob(docId: string): Promise<Blob | undefined> {
+  const result = await get<{ docId: string; blob: Blob }>(STORES.FILE_BLOBS, docId)
+  return result?.blob
+}
+
+export async function deleteFileBlob(docId: string): Promise<void> {
+  return remove(STORES.FILE_BLOBS, docId)
+}
+
 export async function resetLibrary(): Promise<void> {
   await clear(STORES.DOCS)
   await clear(STORES.CHUNKS)
   await clear(STORES.VECTORS)
   await clear(STORES.LEXICAL_INDEX)
+  await clear(STORES.FILE_BLOBS)
 }
 
 export async function resetAll(): Promise<void> {

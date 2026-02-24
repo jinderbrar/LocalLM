@@ -51,50 +51,50 @@ function PromptEditor() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-4">
+    <div className="flex h-full flex-col gap-3 overflow-hidden p-4">
       {/* Tabs */}
-      <Tabs value={activePrompt} onValueChange={(v) => setActivePrompt(v as PromptType)}>
+      <Tabs value={activePrompt} onValueChange={(v) => setActivePrompt(v as PromptType)} className="flex-shrink-0">
         <TabsList className="w-full">
-          <TabsTrigger value="generation" className="flex-1 gap-2">
-            <MessageSquare className="h-4 w-4" />
-            Generation Prompt
+          <TabsTrigger value="generation" className="flex-1 gap-1.5 px-2 text-xs">
+            <MessageSquare className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="truncate">Generation Prompt</span>
           </TabsTrigger>
-          <TabsTrigger value="polish" className="flex-1 gap-2">
-            <Sparkles className="h-4 w-4" />
-            Polish Prompt
+          <TabsTrigger value="polish" className="flex-1 gap-1.5 px-2 text-xs">
+            <Sparkles className="h-3.5 w-3.5 flex-shrink-0" />
+            <span className="truncate">Polish Prompt</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>
 
       {/* Info Card */}
-      <Card className="border-primary/20 bg-primary/5 p-4">
-        <div className="space-y-3">
-          <p className="text-sm font-medium">Available placeholders:</p>
+      <Card className="flex-shrink-0 border-primary/20 bg-primary/5 p-3">
+        <div className="space-y-2">
+          <p className="text-xs font-medium">Available placeholders:</p>
           {activePrompt === 'generation' ? (
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-1.5 text-xs">
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="mt-0.5 font-mono">
+                <Badge variant="outline" className="flex-shrink-0 font-mono text-xs">
                   {'{context}'}
                 </Badge>
                 <span className="text-muted-foreground">The retrieved document chunks</span>
               </li>
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="mt-0.5 font-mono">
+                <Badge variant="outline" className="flex-shrink-0 font-mono text-xs">
                   {'{question}'}
                 </Badge>
                 <span className="text-muted-foreground">The user's question</span>
               </li>
             </ul>
           ) : (
-            <ul className="space-y-2 text-sm">
+            <ul className="space-y-1.5 text-xs">
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="mt-0.5 font-mono">
+                <Badge variant="outline" className="flex-shrink-0 font-mono text-xs">
                   {'{question}'}
                 </Badge>
                 <span className="text-muted-foreground">The user's question</span>
               </li>
               <li className="flex items-start gap-2">
-                <Badge variant="outline" className="mt-0.5 font-mono">
+                <Badge variant="outline" className="flex-shrink-0 font-mono text-xs">
                   {'{answer}'}
                 </Badge>
                 <span className="text-muted-foreground">The extractive answer to polish</span>
@@ -110,43 +110,45 @@ function PromptEditor() {
       </Card>
 
       {/* Status Badge */}
-      <div className="flex items-center justify-end">
+      <div className="flex flex-shrink-0 items-center justify-end">
         {hasCustom ? (
-          <Badge variant="default" className="gap-1.5">
-            <Palette className="h-3 w-3" />
-            Using custom prompt
+          <Badge variant="default" className="gap-1 text-xs">
+            <Palette className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">Using custom prompt</span>
           </Badge>
         ) : (
-          <Badge variant="secondary" className="gap-1.5">
-            <FileText className="h-3 w-3" />
-            Using default prompt
+          <Badge variant="secondary" className="gap-1 text-xs">
+            <FileText className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">Using default prompt</span>
           </Badge>
         )}
       </div>
 
       {/* Textarea */}
-      <Textarea
-        value={promptText}
-        onChange={(e) => setPromptText(e.target.value)}
-        placeholder="Enter your prompt template..."
-        className="min-h-[300px] flex-1 font-mono text-sm"
-      />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <Textarea
+          value={promptText}
+          onChange={(e) => setPromptText(e.target.value)}
+          placeholder="Enter your prompt template..."
+          className="h-full resize-none font-mono text-xs"
+        />
+      </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
-        <Button variant="outline" onClick={handleReset} disabled={!hasCustom} className="flex-1">
+      <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row">
+        <Button variant="outline" onClick={handleReset} disabled={!hasCustom} size="sm" className="flex-1 text-xs">
           Reset to Default
         </Button>
-        <Button onClick={handleSave} className="flex-1">
+        <Button onClick={handleSave} size="sm" className="flex-1 text-xs">
           Save Custom Prompt
         </Button>
       </div>
 
       {/* Success Message */}
       {showSaved && (
-        <Alert className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
+        <Alert className="flex-shrink-0 border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950">
           <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-          <AlertDescription className="text-green-800 dark:text-green-200">
+          <AlertDescription className="text-xs text-green-800 dark:text-green-200">
             Prompt saved successfully!
           </AlertDescription>
         </Alert>

@@ -1,15 +1,26 @@
 import { useState, useEffect, useRef } from 'react'
+import { MarkdownPreview } from '@/components/MarkdownPreview'
+import { PDFPreview } from '@/components/PDFPreview'
 import { ingestFile, isFileSupported } from '../core/ingest'
-import { saveDoc, getAllDocs, saveChunk, getChunksByDocId, deleteDoc } from '../core/storage/db'
+import { saveDoc, getAllDocs, saveChunk, getChunksByDocId, deleteDoc, getDoc, saveFileBlob, getFileBlob } from '../core/storage/db'
+import { reconstructTextFromChunks } from '../core/utils/textReconstruction'
+import type { Doc } from '../core/types'
 import { chunkPages } from '../core/chunk/chunker'
 import { rebuildLexicalIndex } from '../core/rank'
 import { buildVectorIndex } from '../core/index_vec'
-import type { Doc } from '../core/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { FileText, FileCode, File, Loader2, X, Trash2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +33,7 @@ function Sources() {
     stage: string
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; content: string; type: Doc['type']; blob?: Blob } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
@@ -69,6 +81,11 @@ function Sources() {
 
         setUploadProgress({ fileName: file.name, stage: 'Saving...' })
         await saveDoc(doc)
+
+        // Save original file blob for PDF preview
+        if (doc.type === 'pdf') {
+          await saveFileBlob(doc.id, file)
+        }
 
         setUploadProgress({ fileName: file.name, stage: 'Chunking...' })
         const chunks = chunkPages(pages)
@@ -139,12 +156,59 @@ function Sources() {
     }
   }
 
+  async function handlePreviewDocument(docId: string) {
+    try {
+      console.log('📄 Loading preview for docId:', docId)
+      const doc = await getDoc(docId)
+      if (!doc) {
+        console.error('Document not found:', docId)
+        setError('Document not found')
+        return
+      }
+
+      console.log('📄 Document found:', doc.name, 'type:', doc.type)
+
+      // For PDFs, try to load the original file blob
+      if (doc.type === 'pdf') {
+        const blob = await getFileBlob(docId)
+        if (blob) {
+          console.log('📄 Loaded PDF blob')
+          setPreviewDoc({
+            name: doc.name,
+            content: '', // Not used for PDF
+            type: doc.type,
+            blob
+          })
+          return
+        }
+        console.log('⚠️ PDF blob not found, falling back to text')
+      }
+
+      // Get all chunks for this document to reconstruct the text
+      const chunks = await getChunksByDocId(docId)
+      console.log(`📄 Loaded ${chunks.length} chunks`)
+
+      // Reconstruct text with intelligent overlap handling
+      const content = reconstructTextFromChunks(chunks)
+      console.log(`📄 Reconstructed ${content.length} characters`)
+
+      setPreviewDoc({
+        name: doc.name,
+        content: content || 'No content available',
+        type: doc.type
+      })
+    } catch (error) {
+      console.error('Failed to load document:', error)
+      setError('Failed to load document preview')
+    }
+  }
+
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full w-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col gap-3 border-b p-4">
+      <div className="flex flex-shrink-0 flex-col gap-3 border-b p-4">
         <h2 className="text-lg font-semibold">Sources</h2>
-        <Button onClick={handleAddSourceClick} disabled={uploading} className="w-full">
+        <Button onClick={handleAddSourceClick} disabled={uploading} className="w-full" size="sm">
           {uploading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -223,9 +287,14 @@ function Sources() {
             <Card
               key={doc.id}
               className={cn(
-                'group relative p-4 transition-colors hover:bg-accent/50',
+                'group relative p-4 transition-colors hover:bg-accent/50 cursor-pointer hover:border-primary',
                 'flex gap-3'
               )}
+              onClick={(e) => {
+                console.log('Document card clicked:', doc.id, doc.name)
+                handlePreviewDocument(doc.id)
+              }}
+              title="Click to preview document"
             >
               <div className="flex-shrink-0 text-2xl">{getDocIcon(doc.type)}</div>
               <div className="min-w-0 flex-1">
@@ -259,7 +328,10 @@ function Sources() {
                 variant="ghost"
                 size="icon"
                 className="absolute right-2 top-2 h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => handleDeleteDoc(doc.id, doc.name)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteDoc(doc.id, doc.name)
+                }}
                 title="Delete document"
               >
                 <Trash2 className="h-4 w-4" />
@@ -268,6 +340,43 @@ function Sources() {
           ))}
         </div>
       )}
+
+      {/* Document Preview Dialog */}
+      <Dialog open={!!previewDoc} onOpenChange={(open) => !open && setPreviewDoc(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {previewDoc?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Full document preview
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[60vh]">
+            {previewDoc?.type === 'pdf' && previewDoc?.blob ? (
+              <PDFPreview blob={previewDoc.blob} />
+            ) : previewDoc?.type === 'md' ? (
+              <div className="p-4 bg-muted/30 rounded-lg">
+                <MarkdownPreview content={previewDoc?.content || ''} />
+              </div>
+            ) : (
+              <div className="p-4 bg-muted/30 rounded-lg whitespace-pre-wrap font-sans text-sm leading-7 text-foreground">
+                {previewDoc?.content.split('\n\n').map((para, idx) => (
+                  <p key={idx} className="mb-4">
+                    {para.trim()}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewDoc(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

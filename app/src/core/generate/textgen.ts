@@ -2,6 +2,7 @@ import { pipeline } from '@xenova/transformers'
 import { getModelById, DEFAULT_MODEL_ID } from './models'
 import { debugLogger } from '../debug'
 import { getCustomPrompt, buildPromptFromTemplate } from '../debug/prompts'
+import { getBestDevice } from '../deviceDetection'
 
 let generationPipeline: any = null
 let currentModelId: string | null = null
@@ -41,9 +42,23 @@ export async function initGenerationModel(
 
     console.log(`Task type: ${task}, Model path: ${modelConfig.modelPath}`)
 
+    // Detect best device (WebGPU or WASM)
+    const device = await getBestDevice()
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    console.log(`🚀 Loading Generation Model: ${modelConfig.name}`)
+    console.log(`📦 Model Size: ${modelConfig.size}`)
+    console.log(`🎮 Device: ${device === 'webgpu' ? 'GPU (WebGPU)' : 'CPU (WASM)'}`)
+    console.log(`🔧 Precision: fp32 (full precision for stability)`)
+    console.log(`⚡ Expected Speed: ${device === 'webgpu' ? '5-10 seconds' : '10-20 seconds'}`)
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+
     let lastProgress = 0
     // Load model with progress tracking
-    generationPipeline = await pipeline(task, modelConfig.modelPath, {
+    // NOTE: Gemma 3 has issues with fp16/q4 on WebGPU, so we use fp32 (unquantized)
+    const pipelineOptions: any = {
+      device, // Use WebGPU if available, fallback to WASM
+      dtype: 'fp32', // Use fp32 for Gemma 3 (q4 causes overflow on WebGPU)
       progress_callback: (progress: any) => {
 
         // Avoid flooding with too many updates
@@ -74,7 +89,10 @@ export async function initGenerationModel(
           onProgress?.({ status: 'downloading', progress: 0.5 })
         }
       },
-    })
+    }
+
+    // Load the model with the configured options
+    generationPipeline = await pipeline(task, modelConfig.modelPath, pipelineOptions)
 
     currentModelId = modelId
     console.log(`${modelConfig.name} loaded successfully ✓`)
@@ -99,9 +117,14 @@ export function isModelLoaded(): boolean {
 export async function generateAnswer(
   question: string,
   context: string,
-  maxLength: number = 450
+  maxTokens: number = 150
 ): Promise<string> {
+  // DISABLED: Generative models not currently supported
+  throw new Error('Generative answer generation is currently disabled. T5/Gemma models are not supported in this build.')
+
+  /* eslint-disable no-unreachable */
   try {
+    const startTime = performance.now()
     console.log('🔍 generateAnswer called', {
       hasModel: !!generationPipeline,
       currentModel: currentModelId,
@@ -119,284 +142,81 @@ export async function generateAnswer(
       throw new Error('Model config not found')
     }
 
-    const task = modelConfig.task
-    console.log('🚀 Starting with task:', task)
+    // Build instruction prompt for Gemma 3
+    const messages = [
+      { role: 'user', content: `Answer this question based on the context provided.\n\nContext: ${context.slice(0, 2000)}\n\nQuestion: ${question}\n\nAnswer concisely:` }
+    ]
 
-    // Handle question-answering task (extractive QA)
-    if (task === 'question-answering') {
-      console.log('📝 Question:', question)
-      console.log('📚 Context length:', context.length)
-
-      const result = await generationPipeline(question, context, {
-        top_k: 3, // Get top 3 answers
-      })
-
-      console.log('📦 QA result:', result)
-
-      // QA returns: { answer, score, start, end } or array of answers
-      if (Array.isArray(result)) {
-        const bestAnswer = result[0]
-        return bestAnswer?.answer || 'No answer found in the context.'
-      }
-
-      return result?.answer || 'No answer found in the context.'
-    }
-
-    // Handle text generation tasks (T5, GPT, etc.)
-    const modelType = getModelType(currentModelId || '')
-    const prompt = buildPrompt(modelType, question, context)
+    // Apply chat template using tokenizer
+    const prompt = generationPipeline.tokenizer.apply_chat_template(messages, {
+      tokenize: false,
+      add_generation_prompt: true,
+    })
 
     console.log('📝 Prompt:', prompt.substring(0, 200) + '...')
 
     // Log prompt sent
     debugLogger.logPromptSent({
       modelId: currentModelId || DEFAULT_MODEL_ID,
-      modelType,
+      modelType: 'gemma-3',
       prompt,
       promptLength: prompt.length,
-      maxTokens: maxLength,
+      maxTokens: 150,
       temperature: 0.3,
     })
 
+    // Generate with reasonable settings for speed
     const result = await generationPipeline(prompt, {
-      max_new_tokens: maxLength,
+      max_new_tokens: 150,
       temperature: 0.3,
-      top_p: 0.95,
-      do_sample: true,
+      top_p: 0.9,
+      do_sample: false, // Greedy decoding for speed
       repetition_penalty: 1.2,
       return_full_text: false,
     })
 
-    console.log('📦 Raw generation result:', result)
+    const endTime = performance.now()
+    const duration = Math.round(endTime - startTime)
+    console.log(`⚡ Generation completed in ${duration}ms`)
+    console.log('📦 Raw result:', result)
 
-    // Extract and clean generated text
-    let generatedText = extractGeneratedText(result)
-    generatedText = cleanOutput(generatedText, prompt, modelType)
+    // Extract generated text
+    let answer = ''
+    if (Array.isArray(result)) {
+      answer = result[0]?.generated_text || ''
+    } else {
+      answer = (result as any)?.generated_text || ''
+    }
 
-    console.log('✨ Final cleaned answer:', generatedText)
+    // Clean up common artifacts
+    answer = answer.trim()
+    answer = answer.replace(/^Answer:\s*/i, '')
+    answer = answer.replace(/^A:\s*/i, '')
 
-    return generatedText || 'Unable to generate a clear answer from the context.'
+    console.log('✨ Final answer:', answer)
+
+    if (!answer || answer.length < 3) {
+      return 'Unable to generate a clear answer from the context.'
+    }
+
+    return answer
   } catch (error) {
     console.error('Generation error:', error)
-    return `Error: ${error instanceof Error ? error.message : 'Generation failed'}`
-  }
-}
 
-function getModelType(modelId: string): 'flan-t5' | 't5' | 'gpt' | 'unknown' {
-  if (modelId.includes('flan-t5')) return 'flan-t5'
-  if (modelId.includes('t5')) return 't5'
-  if (modelId.includes('gpt')) return 'gpt'
-  return 'unknown'
-}
-
-function normalize(text: string) {
-  return text.replace(/\s+/g, ' ').trim()
-}
-
-function chunkContext(context: string, maxChars = 1600) {
-  const clean = normalize(context)
-  // Cheap chunking: split sentences-ish. You can replace with real chunking later.
-  const parts = clean.split(/(?<=[.?!])\s+/)
-  const chunks: string[] = []
-  let cur = ''
-
-  for (const p of parts) {
-    if ((cur + ' ' + p).length > maxChars) {
-      if (cur) chunks.push(cur.trim())
-      cur = p
-    } else {
-      cur += ' ' + p
-    }
-  }
-  if (cur.trim()) chunks.push(cur.trim())
-  return chunks.slice(0, 6) // cap number of chunks to keep prompt stable
-}
-
-function buildPrompt(modelType: string, question: string, context: string): string {
-  // Check for custom prompt first
-  const customPrompt = getCustomPrompt('generation')
-  if (customPrompt) {
-    // Use custom prompt with placeholders
-    const chunks = chunkContext(context, 800)
-    const numberedContext = chunks.map((c, i) => `[${i + 1}] ${c}`).join('\n')
-    return buildPromptFromTemplate(customPrompt, {
-      question: normalize(question),
-      context: numberedContext,
-    })
-  }
-
-  // Default prompts
-  const q = normalize(question)
-  const chunks = chunkContext(context, 800) // small chunks
-  const numberedContext = chunks.map((c, i) => `[${i + 1}] ${c}`).join('\n')
-
-  const groundingRules =
-    `Rules:\n` +
-    `- Use ONLY the context.\n` +
-    `- If the answer is not in the context, reply exactly: NOT IN CONTEXT.\n` +
-    `- Be brief (1-3 sentences).\n` +
-    `- If you use context, include citations like [1][3].\n`
-
-  switch (modelType) {
-    case 'flan-t5':
-      // Flan usually likes simple instruction + schema
-      return (
-        `${groundingRules}\n` +
-        `Context:\n${numberedContext}\n\n` +
-        `Question: ${q}\n` +
-        `Answer:`
-      )
-
-    case 't5':
-      // Keep it extremely consistent; minimal fluff
-      return (
-        `rules: use only context; if missing say NOT IN CONTEXT; cite like [1]. ` +
-        `context: ${numberedContext} ` +
-        `question: ${q} ` +
-        `answer:`
-      )
-
-    case 'gpt':
-      // Works better if you can use chat roles, but keeping your single string:
-      return (
-        `${groundingRules}\n` +
-        `Context:\n${numberedContext}\n\n` +
-        `Question: ${q}\n` +
-        `Answer:`
-      )
-
-    default:
-      return (
-        `${groundingRules}\n` +
-        `Context:\n${numberedContext}\n\n` +
-        `Question: ${q}\n` +
-        `Answer:`
-      )
-  }
-}
-
-
-function extractGeneratedText(result: any): string {
-  if (Array.isArray(result)) {
-    return result[0]?.generated_text || result[0]?.text || ''
-  }
-  return result?.generated_text || result?.text || ''
-}
-
-function cleanOutput(text: string, prompt: string, modelType: string): string {
-  let cleaned = text.trim()
-
-  console.log('🧹 Cleaning output. Original length:', cleaned.length)
-  console.log('🧹 First 300 chars:', cleaned.substring(0, 300))
-
-  // AGGRESSIVE: Remove exact prompt match
-  if (cleaned.startsWith(prompt)) {
-    cleaned = cleaned.slice(prompt.length).trim()
-    console.log('✂️ Removed exact prompt. New length:', cleaned.length)
-  }
-
-  // AGGRESSIVE: Remove everything before "Answer:" (multiple variations)
-  const answerMarkers = [
-    'Answer:',
-    'answer:',
-    'Answer :',
-    'A:',
-    'Response:',
-    'response:',
-  ]
-
-  for (const marker of answerMarkers) {
-    const idx = cleaned.lastIndexOf(marker)
-    if (idx !== -1) {
-      cleaned = cleaned.slice(idx + marker.length).trim()
-      console.log(`✂️ Removed text before "${marker}". New length:`, cleaned.length)
-      break
-    }
-  }
-
-  // AGGRESSIVE: Remove Rules/Context/Question sections that models echo
-  const removePatterns = [
-    /Rules:[\s\S]*?(?=Answer:|$)/gi,
-    /Context:[\s\S]*?(?=Question:|Answer:|$)/gi,
-    /Question:[\s\S]*?(?=Answer:|$)/gi,
-    /\[\d+\][\s\S]*?(?=Question:|Answer:|$)/gi, // Remove numbered context citations
-  ]
-
-  for (const pattern of removePatterns) {
-    const before = cleaned
-    cleaned = cleaned.replace(pattern, '').trim()
-    if (before !== cleaned) {
-      console.log('✂️ Pattern removed. New length:', cleaned.length)
-    }
-  }
-
-  // Remove common instruction echoes at start
-  const badStarts = [
-    'Use ONLY the context',
-    'use only context',
-    'If the answer is not in the context',
-    'if missing say NOT IN CONTEXT',
-    'Be brief',
-    'cite like',
-    'Based on the context',
-    'According to the context',
-  ]
-
-  for (const bad of badStarts) {
-    if (cleaned.toLowerCase().startsWith(bad.toLowerCase())) {
-      // Find the first sentence after this
-      const sentences = cleaned.split(/[.!?]+/)
-      if (sentences.length > 1) {
-        cleaned = sentences.slice(1).join('. ').trim()
-        console.log('✂️ Removed instruction echo. New length:', cleaned.length)
+    // Provide helpful error messages
+    if (error instanceof Error) {
+      if (error.message.includes('timeout')) {
+        return 'Generation took too long. Try a simpler question or refresh the page.'
       }
-    }
-  }
-
-  // Remove numbered citations that aren't part of the answer
-  cleaned = cleaned.replace(/^\[\d+\]\s*/g, '')
-
-  // AGGRESSIVE: If output still contains "Context:" or "Question:", take only the part after "Answer:"
-  if (cleaned.match(/Context:|Question:|Rules:/i)) {
-    const parts = cleaned.split(/Answer:/i)
-    if (parts.length > 1) {
-      cleaned = parts[parts.length - 1].trim()
-      console.log('✂️ Extracted answer portion. New length:', cleaned.length)
-    }
-  }
-
-  // Remove line breaks that break up sentences
-  cleaned = cleaned.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim()
-
-  // Remove excessive repetition
-  const sentences = cleaned.split(/[.!?]+/).filter((s) => s.trim().length > 5)
-  if (sentences.length > 2) {
-    const uniqueSentences = []
-    const seenNormalized = new Set()
-
-    for (const sentence of sentences) {
-      const normalized = sentence.trim().toLowerCase()
-      if (normalized.length > 10 && !seenNormalized.has(normalized)) {
-        uniqueSentences.push(sentence.trim())
-        seenNormalized.add(normalized)
+      if (error.message.includes('out of memory') || error.message.includes('OOM')) {
+        return 'Out of memory. Try closing other tabs or using a shorter document.'
       }
     }
 
-    if (uniqueSentences.length > 0) {
-      cleaned = uniqueSentences.join('. ')
-    }
+    return `Error: ${error instanceof Error ? error.message : 'Generation failed. Please try again.'}`
   }
-
-  // Ensure proper ending punctuation
-  if (cleaned && !cleaned.match(/[.!?]$/)) {
-    cleaned += '.'
-  }
-
-  console.log('✨ Final cleaned length:', cleaned.length)
-  console.log('✨ Final output:', cleaned.substring(0, 200))
-
-  return cleaned
 }
+
 
 export function formatContextFromChunks(
   chunks: Array<{ text: string; docName: string }>
@@ -423,6 +243,11 @@ export async function polishAnswer(
   extractiveAnswer: string,
   question: string
 ): Promise<string> {
+  // DISABLED: Just return the extractive answer without polishing
+  console.log('⚠️ Answer polishing disabled (T5 models not supported)')
+  return extractiveAnswer
+
+  /* eslint-disable no-unreachable */
   try {
     console.log('✨ polishAnswer called', {
       question: question.substring(0, 50),
@@ -461,7 +286,13 @@ export async function polishAnswer(
     console.log('📦 Polish result:', result)
 
     // Extract and clean the polished text
-    let polished = extractGeneratedText(result)
+    const resultAny = result as any
+    let polished = ''
+    if (Array.isArray(resultAny)) {
+      polished = resultAny[0]?.generated_text || resultAny[0]?.text || ''
+    } else {
+      polished = resultAny?.generated_text || resultAny?.text || ''
+    }
     polished = polished.trim()
 
     // Remove common artifacts

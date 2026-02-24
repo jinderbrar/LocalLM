@@ -3,10 +3,9 @@ import Chat from './Chat'
 import Debug from './Debug'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Settings } from 'lucide-react'
 
 function Layout() {
+
   return (
     <div className="flex h-screen flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950">
       {/* Header */}
@@ -24,26 +23,23 @@ function Layout() {
             Local-only
           </Badge>
           <ThemeToggle />
-          <Button variant="ghost" size="icon" title="Settings">
-            <Settings className="h-5 w-5" />
-          </Button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex flex-1 gap-4 overflow-hidden p-4">
+      <main className="flex min-h-0 flex-1 gap-4 overflow-hidden p-4">
         {/* Sources Panel - Left */}
-        <div className="hidden w-80 overflow-hidden rounded-xl border bg-card shadow-sm lg:flex">
+        <div className="hidden w-56 min-w-0 flex-shrink-0 overflow-hidden rounded-xl border bg-card shadow-sm lg:flex xl:w-64">
           <Sources />
         </div>
 
         {/* Chat Panel - Center */}
-        <div className="flex flex-1 overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="flex min-w-0 flex-1 overflow-hidden rounded-xl border bg-card shadow-sm">
           <Chat />
         </div>
 
         {/* Debug Panel - Right */}
-        <div className="hidden w-80 overflow-hidden rounded-xl border bg-card shadow-sm xl:flex">
+        <div className="hidden w-80 min-w-0 flex-shrink-0 overflow-hidden rounded-xl border bg-card shadow-sm xl:flex xl:w-96">
           <Debug />
         </div>
       </main>

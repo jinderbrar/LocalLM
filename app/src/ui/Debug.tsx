@@ -23,6 +23,7 @@ import {
   Trash2,
   ChevronRight,
   ChevronDown,
+  Download,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -53,6 +54,20 @@ function Debug() {
   const clearLogs = () => {
     debugLogger.clear()
     setExpandedEvents(new Set())
+  }
+
+  const exportLogs = () => {
+    const logs = debugLogger.getEvents()
+    const dataStr = JSON.stringify(logs, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `debug-logs-${new Date().toISOString()}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   const formatEventType = (type: string): string => {
@@ -89,7 +104,7 @@ function Debug() {
         case 'query_start':
           return (
             <>
-              <div className="text-sm">
+              <div className="text-sm break-words">
                 <span className="font-medium">Query:</span> {event.data.query}
               </div>
               {isExpanded && (
@@ -123,15 +138,14 @@ function Debug() {
                   <div className="space-y-2">
                     {event.data.chunks?.map((chunk: any, idx: number) => (
                       <Card key={chunk.id} className="p-2">
-                        <div className="mb-1 flex items-center gap-2 text-xs">
+                        <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
                           <Badge className="h-5">{idx + 1}</Badge>
-                          <span className="flex-1 font-medium">{chunk.docName}</span>
+                          <span className="flex-1 truncate font-medium">{chunk.docName}</span>
                           <span className="text-muted-foreground">p{chunk.pageNumber}</span>
                           <Badge variant="secondary">{chunk.score.toFixed(3)}</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {chunk.text.substring(0, 150)}
-                          {chunk.text.length > 150 && '...'}
+                        <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                          {chunk.text}
                         </p>
                       </Card>
                     ))}
@@ -149,7 +163,7 @@ function Debug() {
                 {event.data.chunksUsed} chunks
               </div>
               {isExpanded && event.data.contextPreview && (
-                <pre className="mt-2 overflow-x-auto rounded-md bg-muted p-2 text-xs">
+                <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-2 text-xs">
                   {event.data.contextPreview}
                 </pre>
               )}
@@ -159,13 +173,15 @@ function Debug() {
         case 'prompt_sent':
           return (
             <>
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium">Prompt:</span>
                 <Badge variant="secondary">{event.data.promptLength} chars</Badge>
-                <Badge variant="outline">{event.data.modelId}</Badge>
+                <Badge variant="outline" className="max-w-full truncate">
+                  {event.data.modelId}
+                </Badge>
               </div>
               {isExpanded && event.data.prompt && (
-                <pre className="mt-2 overflow-x-auto rounded-md bg-slate-950 p-3 text-xs text-slate-50 dark:bg-slate-900">
+                <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-950 p-3 text-xs text-slate-50 dark:bg-slate-900">
                   {event.data.prompt}
                 </pre>
               )}
@@ -175,7 +191,7 @@ function Debug() {
         case 'generation_complete':
           return (
             <>
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium">Generated:</span>
                 <Badge variant="secondary">{event.data.answerLength} chars</Badge>
                 {event.duration && (
@@ -184,7 +200,7 @@ function Debug() {
               </div>
               {isExpanded && event.data.answer && (
                 <Card className="mt-2 p-3">
-                  <p className="text-sm">{event.data.answer}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm">{event.data.answer}</p>
                 </Card>
               )}
             </>
@@ -193,7 +209,7 @@ function Debug() {
         case 'polish_complete':
           return (
             <>
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium">Polished:</span>
                 <Badge variant="secondary">{event.data.answerLength} chars</Badge>
                 {event.duration && (
@@ -202,7 +218,7 @@ function Debug() {
               </div>
               {isExpanded && event.data.polishedAnswer && (
                 <Card className="mt-2 p-3">
-                  <p className="text-sm">{event.data.polishedAnswer}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm">{event.data.polishedAnswer}</p>
                 </Card>
               )}
             </>
@@ -219,9 +235,11 @@ function Debug() {
         case 'error':
           return (
             <>
-              <div className="text-sm font-medium text-destructive">{event.data.error}</div>
+              <div className="whitespace-pre-wrap break-words text-sm font-medium text-destructive">
+                {event.data.error}
+              </div>
               {isExpanded && event.data.stack && (
-                <pre className="mt-2 overflow-x-auto rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+                <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-destructive/10 p-2 text-xs text-destructive">
                   {event.data.stack}
                 </pre>
               )}
@@ -230,8 +248,8 @@ function Debug() {
 
         default:
           return (
-            <div className="text-sm text-muted-foreground">
-              {JSON.stringify(event.data).substring(0, 100)}
+            <div className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+              {JSON.stringify(event.data).substring(0, 300)}
             </div>
           )
       }
@@ -259,20 +277,25 @@ function Debug() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b p-4">
         <h2 className="text-lg font-semibold">Debug Console</h2>
-        <Button variant="ghost" size="icon" onClick={clearLogs} title="Clear logs">
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="icon" onClick={exportLogs} title="Export logs to JSON">
+            <Download className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={clearLogs} title="Clear logs">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="logs" className="flex flex-1 flex-col overflow-hidden">
-        <TabsList className="mx-4 mt-4">
-          <TabsTrigger value="logs" className="gap-2">
-            <FileText className="h-4 w-4" />
-            Logs
+        <TabsList className="mx-4 mt-4 flex-shrink-0">
+          <TabsTrigger value="logs" className="flex-1 gap-1.5 px-2 text-xs">
+            <FileText className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Logs</span>
           </TabsTrigger>
-          <TabsTrigger value="prompts" className="gap-2">
-            <MessageSquare className="h-4 w-4" />
-            Prompts
+          <TabsTrigger value="prompts" className="flex-1 gap-1.5 px-2 text-xs">
+            <MessageSquare className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Prompts</span>
           </TabsTrigger>
         </TabsList>
 
@@ -303,7 +326,7 @@ function Debug() {
                       ) : (
                         <ChevronRight className="h-4 w-4 flex-shrink-0" />
                       )}
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 overflow-hidden">
                         <p className="truncate font-medium">{firstEvent.data.query || 'Query'}</p>
                         <p className="text-xs text-muted-foreground">
                           {new Date(firstEvent.timestamp).toLocaleTimeString()} • {queryEvents.length}{' '}

@@ -33,7 +33,7 @@ export async function executeSearch(query: SearchQuery): Promise<SearchResult> {
   let results: Array<{ chunk: Chunk; score: number }> = []
 
   switch (query.mode) {
-    case 'lexical':
+    case 'bm25':
       results = bm25Search(query.text, index, chunksMap, query.topK || 10)
       break
     case 'semantic': {

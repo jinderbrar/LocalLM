@@ -46,7 +46,7 @@ export interface Citation {
 
 // Search and retrieval types
 
-export type SearchMode = 'lexical' | 'semantic' | 'hybrid'
+export type SearchMode = 'bm25' | 'semantic' | 'hybrid'
 export type ChatMode = 'search' | 'chat'
 
 export interface SearchQuery {

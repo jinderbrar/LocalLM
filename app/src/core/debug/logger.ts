@@ -236,9 +236,9 @@ class DebugLogger {
    */
   private addEvent(event: DebugEvent) {
     this.events.push(event)
-    // Keep only last 100 events to prevent memory issues
-    if (this.events.length > 100) {
-      this.events = this.events.slice(-100)
+    // Keep only last 500 events to prevent memory issues
+    if (this.events.length > 500) {
+      this.events = this.events.slice(-500)
     }
     this.notifyListeners()
   }
